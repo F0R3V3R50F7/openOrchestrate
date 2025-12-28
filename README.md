@@ -1,103 +1,40 @@
 # openOrchestrate
-Intelligent, Self-Managing, User-Friendly Llama.cpp Front-End
 
+**Local models, treated with respect**
 
-![Logo](/images/scrnsht1.png)
+openOrchestrate is a complete desktop application built with phpDesktop-Chrome that provides intelligent model routing, context management, and a seamless chat experience for locally-run AI models via llama.cpp.
 
 ## ✨ Features
 
-### 🧠 **Intelligent Context Management**
-- **Smart pruning** - Automatically summarizes older messages when context fills
-- **Separate pruning server** - Use different models for chat vs summarization
-- **Token tracking** - Real-time context window monitoring
+- **Intelligent Model Routing**: Automatically routes queries to appropriate expert models (text, code, medical, custom)
+- **Velocity Index**: Archives old conversations and intelligently recalls them when relevant
+- **Context Pruning**: Automatically condenses long conversations while preserving key information
+- **Multi-Model Support**: Run multiple GGUF models simultaneously with intelligent GPU allocation
+- **Local Privacy**: All data stays on your machine - no API calls, no cloud dependencies
+- **VRAM Management**: Smart detection and allocation of available GPU memory
+- **File Attachment**: Upload and process text files alongside your conversations
+- **Custom Expert Slots**: Define custom expert models with specific prompts and behaviors
 
-### 🎨 **Professional UI**
-- **Modern glass design** - Beautiful, intuitive interface
-- **File attachments** - Upload and chat about text files
+## 🏗️ Architecture
 
-## 🚀 Quick Start
+### Technology Stack:
 
-### Prerequisites
+- **Frontend**: HTML/CSS/JavaScript (66,063 characters of styles)
+- **Backend**: PHP (40,438 characters of backend code)
+- **Runtime**: phpDesktop-Chrome for simplicity
+- **AI Engine**: llama.cpp for local model inference
+- **Total Codebase**: ~130,000+ characters
 
- [llama.cpp server](https://github.com/ggml-org/llama.cpp) running on `localhost:8080`
+### Core Components:
 
-### How to Run
+- **Pipeline Engine**: Multi-stage processing for queries
+- **Llama Governor**: Intelligent model routing and management
+- **Velocity Index**: Long-term memory and context management
 
-# 1. download from releases, extract and run phpdesktop-chrome.exe
+### Supported Model Types:
 
-## 📋 License
-
-### Open Source (MPL 2.0)
-This software is primarily licensed under the **Mozilla Public License 2.0**.
-
-**What this means:**
-- ✅ Free to use, modify, and distribute
-- ✅ Keep your modifications to this file private (if not distributed)
-- ✅ Use in commercial projects
-- ✅ Combine with other software (proprietary or open)
-
-**Requirements:**
-- 🔄 If you distribute modified versions of **this file**, you must make source available
-- 📝 Include original copyright notices
-- 📄 Disclose source code of modified files
-
-[Read full MPL 2.0 license](LICENSE)
-
-### Commercial Licensing
-For companies needing:
-- **Closed-source distribution rights**
-- **White-label versions**
-- **Custom features and support**
-- **SaaS deployment without MPL requirements**
-
-**Contact:** joshwheatstone@gmail.com
-
-## 🛠️ Architecture
-
-```
-Single PHP File Architecture:
-index.php
-├── Backend API (PHP)
-│   ├── Profile management
-│   ├── Chat persistence
-│   ├── Automatic Message Pruning
-│   └── File handling
-└── Frontend UI (HTML/CSS/JS)
-    ├── Modern, Friendly UI Design
-    ├── Real-time token counting
-    ├── Streaming responses
-    └── File attachment handling
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please note:
-
-1. **All contributors must sign our [CLA](.github/CLA.md)**
-2. **Code is licensed under MPL 2.0**
-3. **Check [Issues](https://github.com/yourusername/openOrchestrate-chat/issues) for open tasks**
-
-## 📈 Roadmap
-
-### v1.0 (Current)
-- [x] Intelligent message archival & retreival
-- [x] Full server governence with automatic context length allocation
-- [x] Profile system
-- [x] Search Chat History
-- [x] Plugin System
-
-## 🆘 Support
-
-- **Issues**: [GitHub Issues](https://github.com/TechnologystLabs/openOrchestrate/Issues)
-- **Email**: joshwheatstone@gmail.com
-
-## 🙏 Acknowledgements
-
-- **[llama.cpp](https://github.com/ggerganov/llama.cpp)** - The backbone of local LLMs
-- **PHP-Desktop** - The echosystem that powers all of our software
-- **All contributors** - Who help make this project better
-
----
-
-**Made with ❤️ by Technologyst Labs • [Follow on (Coming Soon))](url)
-```
+- General conversation (Llama 2/3, Mistral, etc.)
+- Code generation (CodeLlama, DeepSeek-Coder)
+- Medical/health queries (Meditron, BioMistral)
+- Custom expert slots with specific prompts
+- Any GGUF format model compatible with llama.cpp
