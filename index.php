@@ -344,12 +344,11 @@ function detect_running_servers() {
 }
 
 // ===== RUNTIME INITIALIZATION =====
-$configDir = 'configs';
 $chatsDir = 'chats';
 $governorDir = 'governor';
 $modelsDir = 'models';
 
-foreach ([$configDir, $chatsDir, $governorDir] as $dir) {
+foreach ([$chatsDir, $governorDir] as $dir) {
     !is_dir($dir) && mkdir($dir, 0755, true);
 }
 
