@@ -936,6 +936,9 @@ Your response (number or NULL):";
     <title>openOrchestrate - Llama.cpp Chat</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦙</text></svg>">
     <meta name="theme-color" content="#171717">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
             --glass-bg: rgba(255, 255, 255, 0.03);
@@ -949,20 +952,20 @@ Your response (number or NULL):";
             --text-secondary: rgba(255, 255, 255, 0.7);
             --text-tertiary: rgba(255, 255, 255, 0.5);
             --text-quaternary: rgba(255, 255, 255, 0.35);
-            --accent-primary: #64D2FF;
-            --accent-primary-soft: rgba(100, 210, 255, 0.15);
-            --accent-primary-glow: rgba(100, 210, 255, 0.3);
-            --accent-secondary: #BF5AF2;
-            --accent-secondary-soft: rgba(191, 90, 242, 0.15);
-            --accent-gradient: linear-gradient(135deg, #64D2FF 0%, #5E5CE6 50%, #BF5AF2 100%);
+            --accent-primary: #4DE8B4;
+            --accent-primary-soft: rgba(77, 232, 180, 0.15);
+            --accent-primary-glow: rgba(77, 232, 180, 0.3);
+            --accent-secondary: #3BC4F2;
+            --accent-secondary-soft: rgba(59, 196, 242, 0.15);
+            --accent-gradient: linear-gradient(135deg, #8FE388 0%, #4DE8B4 35%, #3BC4F2 70%, #2A9BD4 100%);
             --success: #30D158;
             --success-soft: rgba(48, 209, 88, 0.15);
             --warning: #FFD60A;
             --warning-soft: rgba(255, 214, 10, 0.15);
             --error: #FF453A;
             --error-soft: rgba(255, 69, 58, 0.15);
-            --bg-deep: #0a0a0f;
-            --bg-ambient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(100, 210, 255, 0.08), transparent), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(191, 90, 242, 0.06), transparent), radial-gradient(ellipse 50% 30% at 10% 80%, rgba(94, 92, 230, 0.05), transparent);
+            --bg-deep: #0a1a1f;
+            --bg-ambient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(77, 232, 180, 0.12), transparent), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(59, 196, 242, 0.1), transparent), radial-gradient(ellipse 50% 30% at 10% 80%, rgba(143, 227, 136, 0.08), transparent);
             --radius-xs: 8px;
             --radius-sm: 12px;
             --radius-md: 16px;
@@ -977,7 +980,7 @@ Your response (number or NULL):";
             --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1);
             --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
             --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25), 0 4px 8px rgba(0, 0, 0, 0.15);
-            --shadow-glow: 0 0 40px rgba(100, 210, 255, 0.1);
+            --shadow-glow: 0 0 40px rgba(77, 232, 180, 0.15);
             --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
             --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
             --transition-spring: 400ms cubic-bezier(0.34, 1.56, 0.64, 1)
@@ -1007,6 +1010,53 @@ Your response (number or NULL):";
             position: fixed;
             inset: 0;
             background: var(--bg-ambient);
+            pointer-events: none;
+            z-index: 0
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: 
+                /* Main aurora sweep from top-left */
+                linear-gradient(125deg, 
+                    rgba(143, 227, 136, 0.15) 0%, 
+                    rgba(77, 232, 180, 0.1) 15%, 
+                    rgba(59, 196, 242, 0.08) 30%, 
+                    transparent 50%),
+                /* Secondary sweep */
+                linear-gradient(145deg, 
+                    transparent 30%,
+                    rgba(77, 232, 180, 0.05) 45%, 
+                    rgba(59, 196, 242, 0.08) 55%, 
+                    rgba(42, 155, 212, 0.06) 70%,
+                    transparent 85%),
+                /* Light rays effect */
+                repeating-linear-gradient(
+                    125deg,
+                    transparent 0px,
+                    transparent 80px,
+                    rgba(143, 227, 136, 0.02) 80px,
+                    rgba(143, 227, 136, 0.03) 82px,
+                    transparent 84px,
+                    transparent 200px
+                ),
+                /* More subtle rays */
+                repeating-linear-gradient(
+                    130deg,
+                    transparent 0px,
+                    transparent 120px,
+                    rgba(77, 232, 180, 0.02) 120px,
+                    rgba(59, 196, 242, 0.025) 123px,
+                    transparent 126px,
+                    transparent 300px
+                ),
+                /* Bottom reflection/glow */
+                linear-gradient(0deg,
+                    rgba(59, 196, 242, 0.08) 0%,
+                    rgba(42, 155, 212, 0.04) 5%,
+                    transparent 20%);
             pointer-events: none;
             z-index: 0
         }
@@ -1053,6 +1103,14 @@ Your response (number or NULL):";
             position: relative
         }
 
+        .sidebar-header .icon-btn {
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
+            min-height: 36px;
+            flex-shrink: 0
+        }
+
         .logo-container {
             display: flex;
             align-items: center;
@@ -1070,25 +1128,27 @@ Your response (number or NULL):";
         }
 
         .sidebar-logo-title {
-            font-size: 1.44rem;
-            font-weight: 600;
+            font-family: 'Quicksand', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
             background: var(--accent-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
             position: relative;
             display: inline-block;
-            letter-spacing: -0.02em;
-            filter: drop-shadow(0 0 20px rgba(100, 210, 255, 0.3))
+            letter-spacing: -0.01em;
+            filter: drop-shadow(0 0 20px rgba(77, 232, 180, 0.3))
         }
 
         .sidebar-logo-subtitle {
-            font-size: 0.65rem;
+            font-family: 'Quicksand', sans-serif;
+            font-size: 0.6rem;
             color: var(--text-quaternary);
-            letter-spacing: 0.15em;
+            letter-spacing: 0.12em;
             text-transform: uppercase;
-            font-weight: 500;
-            padding-top: 3px
+            font-weight: 600;
+            padding-top: 2px
         }
 
         .sidebar-footer {
@@ -1111,44 +1171,52 @@ Your response (number or NULL):";
             display: flex;
             align-items: center;
             gap: .75rem;
-            padding: .45rem 1rem;
+            padding: .55rem 1.1rem;
             margin: 1rem 1rem .75rem;
             border-radius: var(--radius-xl);
-            background: var(--glass-bg-elevated);
-            backdrop-filter: blur(var(--blur-sm));
-            border: 1px solid var(--glass-border);
+            background: linear-gradient(160deg, rgba(70, 70, 85, 0.5) 0%, rgba(50, 50, 62, 0.55) 50%, rgba(45, 45, 58, 0.6) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.1);
             color: var(--text-secondary);
             cursor: pointer;
             font-weight: 500;
             font-size: 0.9rem;
             transition: all var(--transition-smooth);
             position: relative;
-            overflow: hidden
+            overflow: hidden;
+            box-shadow: 
+                0 0 6px rgba(255, 255, 255, 0.02),
+                0 2px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
         }
 
         .new-chat-btn::before {
             content: '';
             position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
-            opacity: 0;
-            transition: opacity var(--transition-smooth)
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .new-chat-btn:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border-bright);
+            background: linear-gradient(160deg, rgba(80, 80, 98, 0.55) 0%, rgba(58, 58, 72, 0.6) 50%, rgba(52, 52, 66, 0.65) 100%);
+            border-color: rgba(255, 255, 255, 0.18);
             color: var(--text-primary);
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-sm)
-        }
-
-        .new-chat-btn:hover::before {
-            opacity: 1
+            transform: translateY(-2px);
+            box-shadow: 
+                0 0 10px rgba(255, 255, 255, 0.04),
+                0 6px 20px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .new-chat-btn:active {
-            transform: translateY(0)
+            transform: translateY(0);
+            box-shadow: 
+                0 0 4px rgba(255, 255, 255, 0.02),
+                0 1px 4px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04)
         }
 
         .search-container {
@@ -1234,18 +1302,26 @@ Your response (number or NULL):";
             justify-content: space-between;
             cursor: pointer;
             transition: all var(--transition-smooth);
-            border: 1px solid transparent
+            border: 2px solid transparent;
+            position: relative
         }
 
         .chat-item:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border)
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.45) 0%, rgba(50, 50, 60, 0.5) 100%);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 
+                0 0 6px rgba(255, 255, 255, 0.02),
+                0 2px 8px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04)
         }
 
         .chat-item.active {
-            background: var(--glass-bg-active);
-            border-color: var(--glass-border-bright);
-            box-shadow: var(--shadow-sm)
+            background: linear-gradient(160deg, rgba(70, 70, 85, 0.5) 0%, rgba(55, 55, 68, 0.55) 100%);
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 
+                0 0 8px rgba(255, 255, 255, 0.03),
+                0 3px 10px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
         }
 
         .chat-item-content {
@@ -1291,22 +1367,42 @@ Your response (number or NULL):";
         }
 
         .icon-btn {
-            padding: .5rem;
-            border-radius: 50px;
-            background: transparent;
-            border: 1px solid transparent;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.45) 0%, rgba(48, 48, 58, 0.5) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             color: var(--text-tertiary);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all var(--transition-smooth);
-            line-height: 0
+            line-height: 0;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 5px rgba(255, 255, 255, 0.02),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .icon-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .icon-btn svg {
             display: block;
-            flex-shrink: 0
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1
         }
 
         #settingsBtn svg {
@@ -1314,27 +1410,48 @@ Your response (number or NULL):";
         }
 
         .icon-btn:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border);
-            color: var(--text-primary)
+            background: linear-gradient(160deg, rgba(75, 75, 90, 0.5) 0%, rgba(55, 55, 68, 0.55) 100%);
+            border-color: rgba(255, 255, 255, 0.15);
+            color: var(--text-primary);
+            transform: scale(1.05);
+            box-shadow: 
+                0 0 8px rgba(255, 255, 255, 0.04),
+                0 4px 12px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.07)
+        }
+
+        .icon-btn:active {
+            transform: scale(0.95);
+            box-shadow: 
+                0 0 3px rgba(255, 255, 255, 0.02),
+                0 1px 3px rgba(0, 0, 0, 0.1)
         }
 
         .delete-btn {
             padding: .375rem;
             border-radius: var(--radius-sm);
-            background: transparent;
-            border: none;
+            background: linear-gradient(160deg, rgba(60, 60, 72, 0.35) 0%, rgba(45, 45, 55, 0.4) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.05);
             color: var(--text-quaternary);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all var(--transition-smooth)
+            transition: all var(--transition-smooth);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04)
         }
 
         .delete-btn:hover {
-            background: var(--error-soft);
-            color: var(--error)
+            background: linear-gradient(160deg, rgba(255, 85, 75, 0.25) 0%, rgba(220, 60, 55, 0.3) 100%);
+            border-color: rgba(255, 69, 58, 0.25);
+            color: var(--error);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
+        }
+
+        .delete-btn:active {
+            transform: scale(0.92)
         }
 
         .chat-container {
@@ -1387,6 +1504,24 @@ Your response (number or NULL):";
             overflow-y: auto;
             padding: 1.5rem 2rem;
             position: relative
+        }
+
+        .messages-container::-webkit-scrollbar {
+            width: 8px
+        }
+
+        .messages-container::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: var(--radius-pill)
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-pill)
+        }
+
+        .messages-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.18)
         }
 
         .message {
@@ -1449,7 +1584,7 @@ Your response (number or NULL):";
             gap: .25rem;
             padding: .1875rem .5rem;
             background: var(--accent-primary-soft);
-            border: 1px solid rgba(100, 210, 255, 0.15);
+            border: 1px solid rgba(77, 232, 180, 0.15);
             border-radius: var(--radius-pill);
             font-size: .6875rem;
             color: var(--accent-primary)
@@ -1502,9 +1637,9 @@ Your response (number or NULL):";
 
         .action-btn {
             padding: .375rem .75rem;
-            background: var(--glass-bg);
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.5) 0%, rgba(50, 50, 60, 0.55) 100%);
             backdrop-filter: blur(var(--blur-sm));
-            border: 1px solid var(--glass-border);
+            border: 2px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-lg);
             color: var(--text-tertiary);
             cursor: pointer;
@@ -1513,35 +1648,80 @@ Your response (number or NULL):";
             display: flex;
             align-items: center;
             gap: .375rem;
-            transition: all var(--transition-smooth)
+            transition: all var(--transition-smooth);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 5px rgba(255, 255, 255, 0.02),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .action-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .action-btn:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border-bright);
+            background: linear-gradient(160deg, rgba(75, 75, 90, 0.55) 0%, rgba(58, 58, 70, 0.6) 100%);
+            border-color: rgba(255, 255, 255, 0.18);
             color: var(--text-primary);
-            transform: translateY(-1px)
+            transform: translateY(-2px);
+            box-shadow: 
+                0 0 8px rgba(255, 255, 255, 0.03),
+                0 4px 12px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.07)
+        }
+
+        .action-btn:active {
+            transform: translateY(0);
+            box-shadow: 
+                0 0 3px rgba(255, 255, 255, 0.02),
+                0 1px 3px rgba(0, 0, 0, 0.1)
         }
 
         .action-btn.regenerate {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.2) 0%, rgba(60, 200, 170, 0.25) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1)
         }
 
         .action-btn.regenerate:hover {
-            background: rgba(100, 210, 255, 0.25);
-            box-shadow: 0 0 20px rgba(100, 210, 255, 0.2)
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.28) 0%, rgba(60, 200, 170, 0.33) 100%);
+            border-color: rgba(77, 232, 180, 0.35);
+            box-shadow: 
+                0 0 14px rgba(77, 232, 180, 0.18),
+                0 4px 12px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12)
         }
 
         .action-btn.stop {
-            background: var(--error-soft);
+            background: linear-gradient(160deg, rgba(255, 69, 58, 0.2) 0%, rgba(230, 55, 48, 0.25) 100%);
             color: var(--error);
-            border-color: rgba(255, 69, 58, 0.3)
+            border-color: rgba(255, 69, 58, 0.28);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .action-btn.stop:hover {
-            background: rgba(255, 69, 58, 0.25)
+            background: linear-gradient(160deg, rgba(255, 69, 58, 0.28) 0%, rgba(230, 55, 48, 0.33) 100%);
+            border-color: rgba(255, 69, 58, 0.38);
+            box-shadow: 
+                0 0 14px rgba(255, 69, 58, 0.18),
+                0 4px 12px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1)
         }
 
         .action-btn svg {
@@ -1666,7 +1846,7 @@ Your response (number or NULL):";
         .input-wrapper:focus-within .stat-box.status {
             background: rgba(0, 0, 0, 0.5) !important;
             color: var(--accent-primary) !important;
-            border-color: rgba(100, 210, 255, 0.4) !important
+            border-color: rgba(77, 232, 180, 0.4) !important
         }
 
         .input-wrapper:focus-within .stat-box.status.pruning {
@@ -1770,24 +1950,40 @@ Your response (number or NULL):";
 
         .attach-btn {
             border-radius: var(--radius-pill);
-            background: transparent;
-            border: 1px solid transparent;
+            background: linear-gradient(160deg, rgba(60, 60, 72, 0.4) 0%, rgba(45, 45, 55, 0.45) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.06);
             color: var(--text-quaternary);
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all var(--transition-smooth)
+            transition: all var(--transition-smooth);
+            box-shadow: 
+                0 0 4px rgba(255, 255, 255, 0.02),
+                inset 0 1px 0 rgba(255, 255, 255, 0.04)
         }
 
         .attach-btn:hover {
             color: var(--text-secondary);
-            background: var(--glass-bg);
-            border-color: var(--glass-border)
+            background: linear-gradient(160deg, rgba(70, 70, 85, 0.45) 0%, rgba(52, 52, 62, 0.5) 100%);
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: scale(1.05);
+            box-shadow: 
+                0 0 8px rgba(255, 255, 255, 0.03),
+                0 2px 8px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
+        }
+
+        .attach-btn:active {
+            transform: scale(0.95)
         }
 
         .attach-btn.has-files {
-            color: var(--accent-primary)
+            color: var(--accent-primary);
+            border-color: rgba(77, 232, 180, 0.2);
+            box-shadow: 
+                0 0 10px rgba(77, 232, 180, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
         }
 
         .attachments-preview {
@@ -1810,7 +2006,7 @@ Your response (number or NULL):";
             gap: .375rem;
             padding: .25rem .5rem .25rem .625rem;
             background: var(--accent-primary-soft);
-            border: 1px solid rgba(100, 210, 255, 0.2);
+            border: 1px solid rgba(77, 232, 180, 0.2);
             border-radius: var(--radius-pill);
             font-size: .75rem;
             color: var(--accent-primary);
@@ -1841,7 +2037,7 @@ Your response (number or NULL):";
 
         .attachment-chip .remove-attachment:hover {
             opacity: 1;
-            background: rgba(100, 210, 255, 0.2)
+            background: rgba(77, 232, 180, 0.2)
         }
 
         .attachment-chip .remove-attachment svg {
@@ -1882,8 +2078,8 @@ Your response (number or NULL):";
         .stat-box {
             padding: .375rem .75rem;
             border-radius: var(--radius-pill);
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.45) 0%, rgba(48, 48, 58, 0.5) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             color: var(--text-tertiary);
             font-size: .7rem;
             font-weight: 500;
@@ -1893,92 +2089,163 @@ Your response (number or NULL):";
             white-space: nowrap;
             max-width: 200px;
             flex-shrink: 0;
-            letter-spacing: 0.02em
+            letter-spacing: 0.02em;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 5px rgba(255, 255, 255, 0.02),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .stat-box svg {
             width: 12px;
             height: 12px;
             flex-shrink: 0;
-            opacity: 0.8
+            opacity: 0.8;
+            position: relative;
+            z-index: 1
         }
 
         .stat-box.status {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.15) 0%, rgba(59, 196, 160, 0.2) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.pruning {
-            background: var(--warning-soft);
+            background: linear-gradient(160deg, rgba(255, 214, 10, 0.15) 0%, rgba(220, 180, 10, 0.2) 100%);
             color: var(--warning);
-            border-color: rgba(255, 214, 10, 0.2)
+            border-color: rgba(255, 214, 10, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 214, 10, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.generating {
-            background: var(--success-soft);
+            background: linear-gradient(160deg, rgba(48, 209, 88, 0.15) 0%, rgba(40, 175, 70, 0.2) 100%);
             color: var(--success);
-            border-color: rgba(48, 209, 88, 0.2)
+            border-color: rgba(48, 209, 88, 0.25);
+            box-shadow: 
+                0 0 8px rgba(48, 209, 88, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.error {
-            background: var(--error-soft);
+            background: linear-gradient(160deg, rgba(255, 69, 58, 0.15) 0%, rgba(220, 55, 48, 0.2) 100%);
             color: var(--error);
-            border-color: rgba(255, 69, 58, 0.2)
+            border-color: rgba(255, 69, 58, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.routing {
-            background: var(--accent-secondary-soft);
+            background: linear-gradient(160deg, rgba(59, 196, 242, 0.15) 0%, rgba(50, 170, 210, 0.2) 100%);
             color: var(--accent-secondary);
-            border-color: rgba(191, 90, 242, 0.2)
+            border-color: rgba(59, 196, 242, 0.25);
+            box-shadow: 
+                0 0 8px rgba(59, 196, 242, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.indexing {
-            background: var(--accent-secondary-soft);
+            background: linear-gradient(160deg, rgba(59, 196, 242, 0.15) 0%, rgba(50, 170, 210, 0.2) 100%);
             color: var(--accent-secondary);
-            border-color: rgba(191, 90, 242, 0.2)
+            border-color: rgba(59, 196, 242, 0.25);
+            box-shadow: 
+                0 0 8px rgba(59, 196, 242, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.searching {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.15) 0%, rgba(59, 196, 160, 0.2) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.switching {
-            background: var(--accent-secondary-soft);
+            background: linear-gradient(160deg, rgba(59, 196, 242, 0.15) 0%, rgba(50, 170, 210, 0.2) 100%);
             color: var(--accent-secondary);
-            border-color: rgba(191, 90, 242, 0.2)
+            border-color: rgba(59, 196, 242, 0.25);
+            box-shadow: 
+                0 0 8px rgba(59, 196, 242, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.ready {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.15) 0%, rgba(59, 196, 160, 0.2) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.stopped {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.15) 0%, rgba(59, 196, 160, 0.2) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.offline {
-            background: var(--error-soft);
+            background: linear-gradient(160deg, rgba(255, 69, 58, 0.15) 0%, rgba(220, 55, 48, 0.2) 100%);
             color: var(--error);
-            border-color: rgba(255, 69, 58, 0.2)
+            border-color: rgba(255, 69, 58, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.status.warning {
-            background: var(--warning-soft);
+            background: linear-gradient(160deg, rgba(255, 214, 10, 0.15) 0%, rgba(220, 180, 10, 0.2) 100%);
             color: var(--warning);
-            border-color: rgba(255, 214, 10, 0.2)
+            border-color: rgba(255, 214, 10, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 214, 10, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.context {
-            background: var(--accent-primary-soft);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.15) 0%, rgba(59, 196, 160, 0.2) 100%);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2)
+            border-color: rgba(77, 232, 180, 0.25);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .stat-box.pruning {
@@ -1990,7 +2257,7 @@ Your response (number or NULL):";
         .stat-box.input-tokens {
             background: var(--accent-secondary-soft);
             color: var(--accent-secondary);
-            border-color: rgba(191, 90, 242, 0.2);
+            border-color: rgba(59, 196, 242, 0.2);
             margin-left: auto
         }
 
@@ -2004,7 +2271,7 @@ Your response (number or NULL):";
         .stat-box.context-hint {
             background: var(--accent-primary-soft);
             color: var(--accent-primary);
-            border-color: rgba(100, 210, 255, 0.2);
+            border-color: rgba(77, 232, 180, 0.2);
             animation: pulse-glow 2s infinite
         }
 
@@ -2038,8 +2305,8 @@ Your response (number or NULL):";
         .send-btn {
             padding: .5rem;
             border-radius: var(--radius-pill);
-            background: var(--glass-bg-elevated);
-            border: 1px solid var(--glass-border);
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.5) 0%, rgba(48, 48, 58, 0.55) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             color: var(--text-quaternary);
             cursor: pointer;
             display: flex;
@@ -2049,32 +2316,115 @@ Your response (number or NULL):";
             height: 2.5rem;
             transition: all var(--transition-spring);
             position: relative;
-            overflow: hidden
+            overflow: hidden;
+            box-shadow: 
+                0 0 5px rgba(255, 255, 255, 0.02),
+                0 2px 6px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .send-btn::before {
             content: '';
             position: absolute;
-            inset: 0;
-            background: var(--accent-gradient);
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
+        }
+
+        .send-btn::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -100%;
+            width: 60%;
+            height: 200%;
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.15) 50%, transparent 100%);
+            transform: skewX(-20deg);
+            pointer-events: none;
             opacity: 0;
-            transition: opacity var(--transition-smooth)
+            transition: opacity 0.2s ease
         }
 
         .send-btn:enabled {
-            color: var(--text-primary)
+            color: var(--text-primary);
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.2) 0%, rgba(59, 196, 160, 0.25) 100%);
+            border-color: rgba(77, 232, 180, 0.3);
+            box-shadow: 
+                0 0 12px rgba(77, 232, 180, 0.15),
+                0 2px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1)
+        }
+
+        .send-btn:enabled::after {
+            animation: send-btn-shine 2.5s ease-in-out infinite
+        }
+
+        @keyframes send-btn-shine {
+            0% {
+                left: -100%;
+                opacity: 0
+            }
+            10% {
+                opacity: 1
+            }
+            40% {
+                left: 150%;
+                opacity: 1
+            }
+            50%, 100% {
+                left: 150%;
+                opacity: 0
+            }
         }
 
         .send-btn:enabled:hover {
-            transform: translateY(-2px) scale(1.05);
-            box-shadow: var(--shadow-glow)
+            background: linear-gradient(160deg, rgba(77, 232, 180, 0.3) 0%, rgba(59, 196, 160, 0.35) 100%);
+            border-color: rgba(77, 232, 180, 0.45);
+            transform: translateY(-2px) scale(1.08);
+            box-shadow: 
+                0 0 20px rgba(77, 232, 180, 0.25),
+                0 8px 20px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15)
         }
 
-        .send-btn:enabled:hover::before {
-            opacity: 1
+        .send-btn:enabled:hover::after {
+            animation: send-btn-shine-fast 1s ease-in-out infinite
         }
 
-        .send-btn:enabled svg {
+        @keyframes send-btn-shine-fast {
+            0% {
+                left: -100%;
+                opacity: 0
+            }
+            15% {
+                opacity: 1
+            }
+            60% {
+                left: 150%;
+                opacity: 1
+            }
+            70%, 100% {
+                left: 150%;
+                opacity: 0
+            }
+        }
+
+        .send-btn:enabled:active {
+            transform: translateY(0) scale(0.95);
+            box-shadow: 
+                0 0 8px rgba(77, 232, 180, 0.1),
+                0 1px 3px rgba(0, 0, 0, 0.15)
+        }
+
+        .send-btn:enabled:active::after {
+            animation: none;
+            opacity: 0
+        }
+
+        .send-btn svg {
             position: relative;
             z-index: 1
         }
@@ -2100,8 +2450,9 @@ Your response (number or NULL):";
         }
 
         .welcome-title {
+            font-family: 'Quicksand', sans-serif;
             font-size: 2.5rem;
-            font-weight: 600;
+            font-weight: 700;
             margin-bottom: .5rem;
             background: var(--accent-gradient);
             -webkit-background-clip: text;
@@ -2109,16 +2460,17 @@ Your response (number or NULL):";
             background-clip: text;
             position: relative;
             display: inline-block;
-            letter-spacing: -0.03em;
-            filter: drop-shadow(0 0 30px rgba(100, 210, 255, 0.4))
+            letter-spacing: -0.02em;
+            filter: drop-shadow(0 0 30px rgba(77, 232, 180, 0.4))
         }
 
         .welcome-subtitle {
+            font-family: 'Quicksand', sans-serif;
             font-size: 0.8rem;
             color: var(--text-quaternary);
             letter-spacing: 0.15em;
             text-transform: uppercase;
-            font-weight: 500;
+            font-weight: 600;
             margin-bottom: 3rem
         }
 
@@ -2154,10 +2506,10 @@ Your response (number or NULL):";
         }
 
         .suggestion-btn {
-            background: var(--glass-bg);
+            background: linear-gradient(160deg, rgba(70, 70, 85, 0.55) 0%, rgba(50, 50, 62, 0.6) 50%, rgba(45, 45, 58, 0.65) 100%);
             backdrop-filter: blur(var(--blur-md));
             -webkit-backdrop-filter: blur(var(--blur-md));
-            border: 1px solid var(--glass-border);
+            border: 2px solid rgba(255, 255, 255, 0.12);
             padding: 1rem 1.25rem;
             border-radius: var(--radius-xl);
             text-align: left;
@@ -2165,24 +2517,40 @@ Your response (number or NULL):";
             transition: all var(--transition-smooth);
             pointer-events: auto;
             position: relative;
-            overflow: hidden
+            overflow: hidden;
+            box-shadow: 
+                0 0 8px rgba(255, 255, 255, 0.03),
+                0 4px 16px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .suggestion-btn::before {
             content: '';
             position: absolute;
             top: 0;
-            left: 20%;
-            right: 20%;
-            height: 1px;
-            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%)
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .suggestion-btn:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border-bright);
+            background: linear-gradient(160deg, rgba(80, 80, 98, 0.6) 0%, rgba(58, 58, 72, 0.65) 50%, rgba(52, 52, 66, 0.7) 100%);
+            border-color: rgba(255, 255, 255, 0.2);
             transform: translateY(-3px);
-            box-shadow: var(--shadow-md)
+            box-shadow: 
+                0 0 12px rgba(255, 255, 255, 0.06),
+                0 8px 24px rgba(0, 0, 0, 0.35),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1)
+        }
+
+        .suggestion-btn:active {
+            transform: translateY(-1px);
+            box-shadow: 
+                0 0 6px rgba(255, 255, 255, 0.04),
+                0 2px 8px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06)
         }
 
         .suggestion-title {
@@ -2208,9 +2576,7 @@ Your response (number or NULL):";
             right: 0;
             bottom: 0;
             width: 450px;
-            background: rgba(10, 10, 15, 0.95);
-            backdrop-filter: blur(var(--blur-xl)) saturate(200%);
-            -webkit-backdrop-filter: blur(var(--blur-xl)) saturate(200%);
+            background: rgba(18, 18, 24, 0.98);
             border-left: 1px solid var(--glass-border);
             z-index: 1000;
             transform: translateX(100%);
@@ -2218,7 +2584,7 @@ Your response (number or NULL):";
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5)
+            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03)
         }
 
         .settings-panel::before {
@@ -2228,7 +2594,7 @@ Your response (number or NULL):";
             left: 0;
             right: 0;
             height: 1px;
-            background: linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%);
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 20%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.1) 80%, transparent 100%);
             z-index: 1
         }
 
@@ -2386,29 +2752,76 @@ Your response (number or NULL):";
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: .5rem
+            gap: .5rem;
+            position: relative;
+            overflow: hidden
+        }
+
+        .settings-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .settings-btn.save {
-            background: var(--success);
-            color: #000
+            background: linear-gradient(160deg, rgba(55, 210, 95, 0.95) 0%, rgba(40, 185, 75, 0.95) 100%);
+            color: #000;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 
+                0 0 12px rgba(48, 209, 88, 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2)
         }
 
         .settings-btn.save:hover:not(:disabled) {
-            filter: brightness(1.1);
-            transform: translateY(-1px);
-            box-shadow: 0 0 20px rgba(48, 209, 88, 0.3)
+            background: linear-gradient(160deg, rgba(65, 225, 105, 0.95) 0%, rgba(50, 200, 85, 0.95) 100%);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 
+                0 0 18px rgba(48, 209, 88, 0.3),
+                0 6px 20px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.25)
+        }
+
+        .settings-btn.save:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 
+                0 0 8px rgba(48, 209, 88, 0.15),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15)
         }
 
         .settings-btn.cancel {
-            background: var(--glass-bg-elevated);
+            background: linear-gradient(160deg, rgba(70, 70, 85, 0.55) 0%, rgba(50, 50, 62, 0.6) 100%);
             color: var(--text-secondary);
-            border: 1px solid var(--glass-border)
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 
+                0 0 6px rgba(255, 255, 255, 0.02),
+                0 2px 8px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .settings-btn.cancel:hover {
-            background: var(--glass-bg-hover);
-            color: var(--text-primary)
+            background: linear-gradient(160deg, rgba(80, 80, 98, 0.6) 0%, rgba(58, 58, 72, 0.65) 100%);
+            color: var(--text-primary);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateY(-1px);
+            box-shadow: 
+                0 0 10px rgba(255, 255, 255, 0.03),
+                0 4px 12px rgba(0, 0, 0, 0.22),
+                inset 0 1px 0 rgba(255, 255, 255, 0.07)
+        }
+
+        .settings-btn.cancel:active {
+            transform: translateY(0);
+            box-shadow: 
+                0 0 4px rgba(255, 255, 255, 0.02),
+                0 1px 4px rgba(0, 0, 0, 0.12)
         }
 
         .settings-btn:disabled {
@@ -2426,16 +2839,37 @@ Your response (number or NULL):";
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            background: var(--success-soft);
+            background: linear-gradient(160deg, rgba(48, 209, 88, 0.15) 0%, rgba(40, 175, 70, 0.2) 100%);
             color: var(--success);
-            border: 1px solid rgba(48, 209, 88, 0.2);
-            margin-left: .5rem
+            border: 2px solid rgba(48, 209, 88, 0.25);
+            margin-left: .5rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 8px rgba(48, 209, 88, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
+        }
+
+        .pruning-status::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .pruning-status.inactive {
-            background: var(--error-soft);
+            background: linear-gradient(160deg, rgba(255, 69, 58, 0.15) 0%, rgba(220, 55, 48, 0.2) 100%);
             color: var(--error);
-            border-color: rgba(255, 69, 58, 0.2)
+            border-color: rgba(255, 69, 58, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .governor-section {
@@ -2594,13 +3028,57 @@ Your response (number or NULL):";
         }
 
         .startup-spinner {
-            width: 48px;
-            height: 48px;
-            border: 3px solid var(--glass-border);
-            border-top-color: var(--accent-primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1.5rem
+            width: 220px;
+            height: 18px;
+            border-radius: var(--radius-pill);
+            background: linear-gradient(160deg, rgba(50, 50, 60, 0.5) 0%, rgba(35, 35, 45, 0.6) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            position: relative;
+            margin: 0 auto 1.5rem;
+            box-shadow: 
+                inset 0 2px 4px rgba(0, 0, 0, 0.3),
+                0 0 12px rgba(77, 232, 180, 0.1)
+        }
+
+        .startup-spinner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(255, 255, 255, 0.95) 0px,
+                rgba(255, 255, 255, 0.95) 12px,
+                #4DE8B4 12px,
+                #4DE8B4 24px
+            );
+            background-size: 33.94px 100%;
+            animation: candy-cane 0.6s linear infinite;
+            border-radius: var(--radius-pill)
+        }
+
+        .startup-spinner::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%);
+            border-radius: var(--radius-pill) var(--radius-pill) 0 0;
+            pointer-events: none
+        }
+
+        @keyframes candy-cane {
+            0% {
+                background-position: 0 0
+            }
+            100% {
+                background-position: 33.94px 0
+            }
         }
 
         .startup-title {
@@ -2921,23 +3399,46 @@ Your response (number or NULL):";
             color: var(--warning);
             cursor: pointer;
             margin-bottom: 8px;
-            padding: 4px 8px;
+            padding: 6px 12px;
             border-radius: var(--radius-md);
-            background: var(--warning-soft);
-            border: 1px solid rgba(255, 214, 10, 0.2);
+            background: linear-gradient(160deg, rgba(255, 214, 10, 0.15) 0%, rgba(220, 180, 10, 0.2) 100%);
+            border: 2px solid rgba(255, 214, 10, 0.25);
             transition: all var(--transition-smooth);
             user-select: none;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 8px rgba(255, 214, 10, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1)
+        }
+
+        .pruned-toggle::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .pruned-toggle:hover {
-            background: rgba(255, 214, 10, 0.25);
-            border-color: rgba(255, 214, 10, 0.3);
+            background: linear-gradient(160deg, rgba(255, 214, 10, 0.22) 0%, rgba(220, 180, 10, 0.28) 100%);
+            border-color: rgba(255, 214, 10, 0.35);
+            box-shadow: 
+                0 0 12px rgba(255, 214, 10, 0.15),
+                0 4px 10px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12)
         }
 
         .pruned-toggle svg {
             width: 14px;
             height: 14px;
             transition: transform var(--transition-smooth);
+            position: relative;
+            z-index: 1
         }
 
         .pruned-toggle.collapsed svg {
@@ -2949,14 +3450,30 @@ Your response (number or NULL):";
         }
 
         .pruned-content {
-            padding: 10px;
-            background: rgba(255, 214, 10, 0.05);
-            border: 1px solid rgba(255, 214, 10, 0.1);
+            padding: 12px;
+            background: linear-gradient(160deg, rgba(255, 214, 10, 0.08) 0%, rgba(220, 180, 10, 0.1) 100%);
+            border: 2px solid rgba(255, 214, 10, 0.15);
             border-radius: var(--radius-md);
             font-size: 0.9rem;
             color: var(--text-tertiary);
             position: relative;
             margin-bottom: 10px;
+            overflow: hidden;
+            box-shadow: 
+                0 0 6px rgba(255, 214, 10, 0.05),
+                0 2px 8px rgba(0, 0, 0, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .pruned-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .pruned-content-header {
@@ -2965,7 +3482,9 @@ Your response (number or NULL):";
             align-items: center;
             margin-bottom: 8px;
             padding-bottom: 4px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 214, 10, 0.15);
+            position: relative;
+            z-index: 1
         }
 
         .pruned-label {
@@ -2977,9 +3496,9 @@ Your response (number or NULL):";
         }
 
         .edit-pruned-btn {
-            padding: 4px 8px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            padding: 4px 10px;
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.5) 0%, rgba(48, 48, 58, 0.55) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             border-radius: var(--radius-sm);
             color: var(--text-tertiary);
             cursor: pointer;
@@ -2988,12 +3507,33 @@ Your response (number or NULL):";
             align-items: center;
             gap: 4px;
             transition: all var(--transition-smooth);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 4px rgba(255, 255, 255, 0.02),
+                0 2px 4px rgba(0, 0, 0, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .edit-pruned-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .edit-pruned-btn:hover {
-            background: var(--glass-bg-hover);
-            border-color: var(--glass-border-bright);
+            background: linear-gradient(160deg, rgba(75, 75, 90, 0.55) 0%, rgba(55, 55, 68, 0.6) 100%);
+            border-color: rgba(255, 255, 255, 0.15);
             color: var(--text-primary);
+            box-shadow: 
+                0 0 6px rgba(255, 255, 255, 0.03),
+                0 3px 8px rgba(0, 0, 0, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
         }
 
         .pruned-stats {
@@ -3002,6 +3542,8 @@ Your response (number or NULL):";
             font-size: 0.7rem;
             color: var(--text-quaternary);
             margin-top: 8px;
+            position: relative;
+            z-index: 1
         }
 
         .pruned-stats span {
@@ -3016,12 +3558,12 @@ Your response (number or NULL):";
 
         .message.pruned-message {
             border-left: 3px solid var(--success);
-            background: linear-gradient(90deg, rgba(255, 214, 10, 0.02) 0%, transparent 10px);
+            background: linear-gradient(90deg, rgba(48, 209, 88, 0.04) 0%, transparent 30px);
         }
 
         .message.indexed-message {
             border-left: 3px solid var(--accent-secondary);
-            background: linear-gradient(90deg, rgba(191, 90, 242, 0.05) 0%, transparent 10px);
+            background: linear-gradient(90deg, rgba(59, 196, 242, 0.05) 0%, transparent 30px);
             opacity: 0.7;
         }
 
@@ -3031,18 +3573,22 @@ Your response (number or NULL):";
             gap: 4px;
             font-size: 0.65rem;
             color: var(--accent-secondary);
-            background: rgba(191, 90, 242, 0.1);
-            padding: 2px 8px;
+            background: linear-gradient(160deg, rgba(59, 196, 242, 0.15) 0%, rgba(50, 170, 210, 0.2) 100%);
+            border: 1px solid rgba(59, 196, 242, 0.25);
+            padding: 3px 10px;
             border-radius: var(--radius-sm);
             margin-bottom: 6px;
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            box-shadow: 
+                0 0 6px rgba(59, 196, 242, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08)
             font-weight: 600;
         }
 
         .message.recalled-message {
             border-left: 3px solid var(--accent-primary);
-            background: linear-gradient(90deg, rgba(100, 210, 255, 0.05) 0%, transparent 10px);
+            background: linear-gradient(90deg, rgba(77, 232, 180, 0.05) 0%, transparent 10px);
         }
 
         .message.recalled-message .recalled-badge {
@@ -3051,7 +3597,7 @@ Your response (number or NULL):";
             gap: 4px;
             font-size: 0.65rem;
             color: var(--accent-primary);
-            background: rgba(100, 210, 255, 0.1);
+            background: rgba(77, 232, 180, 0.1);
             padding: 2px 8px;
             border-radius: var(--radius-sm);
             margin-bottom: 6px;
@@ -3113,17 +3659,34 @@ Your response (number or NULL):";
             align-items: center;
             gap: 0.5rem;
             padding: 0.625rem 0.875rem;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+            background: linear-gradient(160deg, rgba(65, 65, 78, 0.45) 0%, rgba(48, 48, 58, 0.5) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.08);
             border-radius: var(--radius-md);
             font-size: 0.75rem;
             color: var(--text-tertiary);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 0 5px rgba(255, 255, 255, 0.02),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
+        }
+
+        .server-status::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+            pointer-events: none
         }
 
         .server-status.compact {
             padding: 0.375rem 0.625rem;
             font-size: 0.7rem;
-            border-radius: var(--radius-sm);
+            border-radius: var(--radius-sm)
         }
 
         .server-status-dot {
@@ -3132,29 +3695,52 @@ Your response (number or NULL):";
             border-radius: 50%;
             background: var(--text-quaternary);
             flex-shrink: 0;
+            position: relative;
+            z-index: 1
         }
 
         .server-status.online .server-status-dot {
             background: var(--success);
-            box-shadow: 0 0 8px var(--success);
+            box-shadow: 0 0 8px var(--success)
         }
 
         .server-status.online {
             color: var(--success);
             border-color: rgba(48, 209, 88, 0.3);
+            box-shadow: 
+                0 0 8px rgba(48, 209, 88, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .server-status.offline .server-status-dot {
-            background: var(--text-quaternary);
+            background: var(--text-quaternary)
         }
 
         .server-status.starting .server-status-dot {
             background: var(--warning);
-            animation: pulse-glow 1.5s infinite;
+            animation: pulse-glow 1.5s infinite
+        }
+
+        .server-status.starting {
+            border-color: rgba(255, 214, 10, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 214, 10, 0.08),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .server-status.error .server-status-dot {
             background: var(--error);
+            box-shadow: 0 0 8px var(--error)
+        }
+
+        .server-status.error {
+            border-color: rgba(255, 69, 58, 0.25);
+            box-shadow: 
+                0 0 8px rgba(255, 69, 58, 0.1),
+                0 2px 6px rgba(0, 0, 0, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05)
         }
 
         .settings-subtitle {
@@ -3175,28 +3761,48 @@ Your response (number or NULL):";
 
         /* Context meter styling */
         .context-meter {
-            height: 4px;
-            border-radius: 2px;
-            background: var(--glass-bg);
+            height: 6px;
+            border-radius: var(--radius-pill);
+            background: linear-gradient(160deg, rgba(50, 50, 60, 0.5) 0%, rgba(35, 35, 45, 0.6) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             overflow: hidden;
             margin-top: 4px;
+            box-shadow: 
+                inset 0 1px 2px rgba(0, 0, 0, 0.2),
+                0 0 4px rgba(255, 255, 255, 0.02)
         }
 
         .context-meter-fill {
             height: 100%;
             transition: width var(--transition-smooth);
+            border-radius: var(--radius-pill);
+            position: relative
+        }
+
+        .context-meter-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50%;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%);
+            border-radius: var(--radius-pill) var(--radius-pill) 0 0
         }
 
         .context-meter-fill.safe {
-            background: var(--accent-primary);
+            background: linear-gradient(90deg, rgba(77, 232, 180, 0.8) 0%, rgba(77, 232, 180, 1) 100%);
+            box-shadow: 0 0 8px rgba(77, 232, 180, 0.4)
         }
 
         .context-meter-fill.warning {
-            background: var(--warning);
+            background: linear-gradient(90deg, rgba(255, 214, 10, 0.8) 0%, rgba(255, 214, 10, 1) 100%);
+            box-shadow: 0 0 8px rgba(255, 214, 10, 0.4)
         }
 
         .context-meter-fill.critical {
-            background: var(--error);
+            background: linear-gradient(90deg, rgba(255, 69, 58, 0.8) 0%, rgba(255, 69, 58, 1) 100%);
+            box-shadow: 0 0 8px rgba(255, 69, 58, 0.4)
         }
     </style>
 </head>
@@ -3449,7 +4055,7 @@ Your response (number or NULL):";
                     </div>
                 </div>
                 
-                <div class="messages-container scrollbar-hidden" id="messagesContainer">
+                <div class="messages-container" id="messagesContainer">
                     <div class="welcome-screen" id="welcomeScreen">
                         <div class="welcome-content">
                             <div class="welcome-title">openOrchestrate</div>
