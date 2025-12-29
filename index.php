@@ -3,7 +3,7 @@
  * openOrchestrate - Intelligent, self-governing Llama.cpp Frontend
  * MPL-2.0 https://mozilla.org/MPL/2.0/
  * @version 0.9 (Pre-Release)
- */
+ * © TechnologystLabs 2026 */
 
 // ===== BACKEND =====
 
