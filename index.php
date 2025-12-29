@@ -211,15 +211,15 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
         $command .= " $k $v";
     }
     
-    // Create batch file that monitors phpdesktop-chrome.exe and kills llama-server when it exits
+    // Create batch file that monitors openOrchestrate.exe and kills llama-server when it exits
     $batchFile = __DIR__ . "/governor/start_{$type}.bat";
     $batchFileWin = str_replace('/', '\\', $batchFile);
     $watchdogBat = "@echo off\r\nsetlocal\r\n\r\n";
     $watchdogBat .= ":: Start llama-server in background\r\n";
     $watchdogBat .= "start \"llama-{$type}\" /B $command\r\n\r\n";
-    $watchdogBat .= ":: Monitor phpdesktop-chrome.exe - when it exits, kill llama-server\r\n";
+    $watchdogBat .= ":: Monitor openOrchestrate.exe - when it exits, kill llama-server\r\n";
     $watchdogBat .= ":watchloop\r\n";
-    $watchdogBat .= "tasklist /fi \"imagename eq phpdesktop-chrome.exe\" 2>nul | find /i \"phpdesktop-chrome.exe\" >nul\r\n";
+    $watchdogBat .= "tasklist /fi \"imagename eq openOrchestrate.exe\" 2>nul | find /i \"openOrchestrate.exe\" >nul\r\n";
     $watchdogBat .= "if errorlevel 1 (\r\n";
     $watchdogBat .= "    taskkill /f /im llama-server.exe >nul 2>&1\r\n";
     $watchdogBat .= "    exit /b\r\n";
@@ -1795,6 +1795,60 @@ Your response (number or NULL):";
             font-weight: 600;
             color: var(--text-primary)
         }
+
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9em;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: var(--radius-sm);
+            overflow: hidden
+        }
+
+        .message-content th,
+        .message-content td {
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--glass-border)
+        }
+
+        .message-content th {
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            font-weight: 600
+        }
+
+        .message-content tr:last-child td {
+            border-bottom: none
+        }
+
+        .message-content tr:hover td {
+            background: rgba(255, 255, 255, 0.02)
+        }
+
+        .message-content ul,
+        .message-content ol {
+            margin: 0.75rem 0;
+            padding-left: 1.5rem
+        }
+
+        .message-content li {
+            margin: 0.4rem 0;
+            line-height: 1.6
+        }
+
+        .message-content h2,
+        .message-content h3,
+        .message-content h4 {
+            color: var(--text-primary);
+            margin: 1.25rem 0 0.5rem;
+            font-weight: 600
+        }
+
+        .message-content h2 { font-size: 1.3em }
+        .message-content h3 { font-size: 1.15em }
+        .message-content h4 { font-size: 1.05em }
 
         .message-actions {
             display: flex;
@@ -5696,15 +5750,64 @@ Your response (number or NULL):";
                 }
                 
                 formatContent(content) {
-                    return content
+                    // Escape HTML first
+                    let html = content
                         .replace(/&/g, '&amp;')
                         .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.trim()}</code></pre>`)
-                        .replace(/`([^`]+)`/g, '<code>$1</code>')
-                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                        .replace(/\n/g, '<br>');
+                        .replace(/>/g, '&gt;');
+                    
+                    // Code blocks (do first to protect content inside)
+                    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+                        return `<pre><code class="language-${lang || 'text'}">${code.trim()}</code></pre>`;
+                    });
+                    
+                    // Tables
+                    html = html.replace(/(?:^|\n)(\|.+\|)\n(\|[-:| ]+\|)\n((?:\|.+\|\n?)+)/gm, (match, header, separator, body) => {
+                        const headers = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+                        const rows = body.trim().split('\n').map(row => {
+                            const cells = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+                            return `<tr>${cells}</tr>`;
+                        }).join('');
+                        return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+                    });
+                    
+                    // Bullet lists (lines starting with * or -)
+                    html = html.replace(/(?:^|\n)([*\-] .+(?:\n[*\-] .+)*)/gm, (match, list) => {
+                        const items = list.split('\n').map(item => {
+                            return `<li>${item.replace(/^[*\-] /, '')}</li>`;
+                        }).join('');
+                        return `<ul>${items}</ul>`;
+                    });
+                    
+                    // Numbered lists
+                    html = html.replace(/(?:^|\n)(\d+\. .+(?:\n\d+\. .+)*)/gm, (match, list) => {
+                        const items = list.split('\n').map(item => {
+                            return `<li>${item.replace(/^\d+\. /, '')}</li>`;
+                        }).join('');
+                        return `<ol>${items}</ol>`;
+                    });
+                    
+                    // Headers
+                    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+                    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+                    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+                    
+                    // Inline code
+                    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+                    
+                    // Bold and italic
+                    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+                    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                    
+                    // Line breaks (but not inside pre/table)
+                    html = html.replace(/\n/g, '<br>');
+                    
+                    // Clean up extra breaks after block elements
+                    html = html.replace(/<\/(table|ul|ol|pre|h[2-4])><br>/g, '</$1>');
+                    html = html.replace(/<br><(table|ul|ol|pre|h[2-4])/g, '<$1');
+                    
+                    return html;
                 }
                 
                 showLoading() {
