@@ -3,7 +3,8 @@
  * openOrchestrate - Intelligent, self-governing Llama.cpp Frontend
  * MPL-2.0 https://mozilla.org/MPL/2.0/
  * @version 0.9 (Pre-Release)
- * © TechnologystLabs 2026 */
+ * © TechnologystLabs 2026
+ */
 
 // ===== BACKEND =====
 
@@ -1067,143 +1068,6 @@ Your response (number or NULL):";
         }
 
         /* Aurora strand lines */
-        .aurora-strands {
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: 0;
-            overflow: hidden
-        }
-
-        .aurora-strand {
-            position: absolute;
-            width: 1px;
-            border-radius: 1px;
-            transform-origin: top center;
-            box-shadow: 
-                0 0 2px currentColor,
-                0 0 4px currentColor,
-                0 0 6px currentColor;
-            opacity: 0.7
-        }
-
-        .aurora-strand::after {
-            content: '';
-            position: absolute;
-            width: 6px;
-            height: 40px;
-            background: radial-gradient(ellipse, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.5) 40%, transparent 70%);
-            border-radius: 50%;
-            left: -2.5px;
-            opacity: 0;
-            animation: strand-shimmer 10s ease-in-out infinite
-        }
-
-        .strand-1::after { animation-delay: 0s; }
-        .strand-2::after { animation-delay: 4s; }
-        .strand-3::after { animation-delay: 7s; }
-
-        @keyframes strand-shimmer {
-            0%, 100% { 
-                opacity: 0; 
-                top: 5%;
-            }
-            15% {
-                opacity: 0.9;
-            }
-            50% { 
-                opacity: 0.7;
-                top: 75%;
-            }
-            85% {
-                opacity: 0;
-            }
-        }
-
-        .strand-1 {
-            height: 110%;
-            top: -5%;
-            left: 30%;
-            background: linear-gradient(180deg, transparent, rgba(180, 255, 180, 0.9) 15%, rgba(150, 245, 210, 0.95) 40%, rgba(120, 225, 245, 0.85) 70%, rgba(90, 200, 240, 0.4) 90%, transparent);
-            color: rgba(150, 240, 210, 0.8);
-            animation: strand-sway-1 25s ease-in-out infinite
-        }
-
-        .strand-2 {
-            height: 115%;
-            top: -8%;
-            left: 45%;
-            background: linear-gradient(180deg, transparent, rgba(140, 225, 255, 0.85) 10%, rgba(120, 215, 250, 0.9) 35%, rgba(100, 205, 245, 0.8) 65%, rgba(80, 190, 235, 0.3) 88%, transparent);
-            color: rgba(120, 215, 250, 0.8);
-            animation: strand-sway-2 18s ease-in-out infinite
-        }
-
-        .strand-3 {
-            height: 105%;
-            top: -3%;
-            left: 58%;
-            background: linear-gradient(180deg, transparent, rgba(160, 250, 200, 0.8) 12%, rgba(130, 240, 220, 0.9) 38%, rgba(100, 220, 245, 0.85) 68%, rgba(70, 195, 240, 0.35) 92%, transparent);
-            color: rgba(130, 235, 220, 0.8);
-            animation: strand-sway-3 22s ease-in-out infinite
-        }
-
-        @keyframes strand-sway-1 {
-            0%, 100% {
-                transform: rotate(-6deg) translateX(0)
-            }
-            20% {
-                transform: rotate(-3deg) translateX(80px)
-            }
-            35% {
-                transform: rotate(-8deg) translateX(180px)
-            }
-            50% {
-                transform: rotate(-4deg) translateX(280px)
-            }
-            65% {
-                transform: rotate(-7deg) translateX(180px)
-            }
-            80% {
-                transform: rotate(-2deg) translateX(60px)
-            }
-        }
-
-        @keyframes strand-sway-2 {
-            0%, 100% {
-                transform: rotate(5deg) translateX(0)
-            }
-            25% {
-                transform: rotate(8deg) translateX(-60px)
-            }
-            50% {
-                transform: rotate(3deg) translateX(40px)
-            }
-            75% {
-                transform: rotate(7deg) translateX(-40px)
-            }
-        }
-
-        @keyframes strand-sway-3 {
-            0%, 100% {
-                transform: rotate(-4deg) translateX(0)
-            }
-            15% {
-                transform: rotate(-7deg) translateX(-50px)
-            }
-            30% {
-                transform: rotate(-2deg) translateX(-120px)
-            }
-            50% {
-                transform: rotate(-6deg) translateX(-80px)
-            }
-            70% {
-                transform: rotate(-3deg) translateX(30px)
-            }
-            85% {
-                transform: rotate(-5deg) translateX(-20px)
-            }
-        }
-
         /* Sparkle particles */
         .sparkles {
             position: fixed;
@@ -3515,6 +3379,15 @@ Your response (number or NULL):";
             box-shadow: 0 0 8px var(--accent-primary)
         }
 
+        .streaming-text {
+            animation: streamPulse 0.15s ease-out
+        }
+
+        @keyframes streamPulse {
+            from { opacity: 0.85 }
+            to { opacity: 1 }
+        }
+
         .waterfall {
             animation: waterfall 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards
         }
@@ -4029,12 +3902,6 @@ Your response (number or NULL):";
     </style>
 </head>
     <body>
-        <div class="aurora-strands">
-            <div class="aurora-strand strand-1"></div>
-            <div class="aurora-strand strand-2"></div>
-            <div class="aurora-strand strand-3"></div>
-        </div>
-
         <div class="sparkles" id="sparkles"></div>
 
         <button class="mobile-sidebar-toggle icon-btn" id="mobileSidebarToggle">
@@ -5682,12 +5549,17 @@ Your response (number or NULL):";
                                     if (token) {
                                         accumulated += token;
                                         contentDiv.innerHTML = this.formatContent(accumulated) + '<span class="typing-cursor"></span>';
+                                        // Retrigger fade animation
+                                        contentDiv.classList.remove('streaming-text');
+                                        void contentDiv.offsetWidth;
+                                        contentDiv.classList.add('streaming-text');
                                         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
                                     }
                                 } catch {}
                             }
                         }
                         
+                        contentDiv.classList.remove('streaming-text');
                         contentDiv.innerHTML = this.formatContent(accumulated);
                         this.messages.push({ role: 'assistant', content: accumulated, timestamp: new Date().toISOString() });
                         this.removeStopButton(assistantDiv);
@@ -5770,21 +5642,31 @@ Your response (number or NULL):";
                         return `<table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
                     });
                     
-                    // Bullet lists (lines starting with * or -)
-                    html = html.replace(/(?:^|\n)([*\-] .+(?:\n[*\-] .+)*)/gm, (match, list) => {
-                        const items = list.split('\n').map(item => {
-                            return `<li>${item.replace(/^[*\-] /, '')}</li>`;
-                        }).join('');
-                        return `<ul>${items}</ul>`;
-                    });
+                    // Process lists line by line
+                    const lines = html.split('\n');
+                    let result = [], inUl = false, inOl = false;
                     
-                    // Numbered lists
-                    html = html.replace(/(?:^|\n)(\d+\. .+(?:\n\d+\. .+)*)/gm, (match, list) => {
-                        const items = list.split('\n').map(item => {
-                            return `<li>${item.replace(/^\d+\. /, '')}</li>`;
-                        }).join('');
-                        return `<ol>${items}</ol>`;
-                    });
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i], bulletMatch = line.match(/^[*\-] (.+)$/), numberMatch = line.match(/^\d+\. (.+)$/);
+                        
+                        if (bulletMatch) {
+                            if (!inUl) { if (inOl) { result.push('</ol>'); inOl = false; } result.push('<ul>'); inUl = true; }
+                            result.push(`<li>${bulletMatch[1]}</li>`);
+                        } else if (numberMatch) {
+                            if (!inOl) { if (inUl) { result.push('</ul>'); inUl = false; } result.push('<ol>'); inOl = true; }
+                            result.push(`<li>${numberMatch[1]}</li>`);
+                        } else if (line.trim() === '' && (inUl || inOl) && lines.slice(i + 1).find(l => l.trim())?.match(/^([*\-]|\d+\.) /)) {
+                            continue; // Skip blank lines within lists
+                        } else {
+                            if (inUl) { result.push('</ul>'); inUl = false; }
+                            if (inOl) { result.push('</ol>'); inOl = false; }
+                            result.push(line);
+                        }
+                    }
+                    if (inUl) result.push('</ul>');
+                    if (inOl) result.push('</ol>');
+                    
+                    html = result.join('\n');
                     
                     // Headers
                     html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
@@ -5797,14 +5679,20 @@ Your response (number or NULL):";
                     // Bold and italic
                     html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
                     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-                    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                    html = html.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
                     
-                    // Line breaks (but not inside pre/table)
+                    // Line breaks (but not inside pre/table/lists)
                     html = html.replace(/\n/g, '<br>');
                     
                     // Clean up extra breaks after block elements
                     html = html.replace(/<\/(table|ul|ol|pre|h[2-4])><br>/g, '</$1>');
                     html = html.replace(/<br><(table|ul|ol|pre|h[2-4])/g, '<$1');
+                    
+                    // Clean up breaks within lists
+                    html = html.replace(/<(ul|ol)><br>/g, '<$1>');
+                    html = html.replace(/<br><\/(ul|ol)>/g, '</$1>');
+                    html = html.replace(/<\/li><br>/g, '</li>');
+                    html = html.replace(/<br><li>/g, '<li>');
                     
                     return html;
                 }
