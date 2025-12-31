@@ -2,11 +2,9 @@
 /**
  * openOrchestrate - Intelligent, self-governing Llama.cpp Frontend
  * MPL-2.0 https://mozilla.org/MPL/2.0/
- * @version 0.9-R5 (Pre-Release)
+ * @version 0.9-R6 (Pre-Release)
  * © TechnologystLabs 2026
  */
-
-// ===== BACKEND =====
 
 /* ===== CORE UTILITIES ===== */
 define('DEFAULT_CONFIG', [
@@ -106,45 +104,121 @@ function load_governor_config() {
 
 /* ===== AUX MODEL CLIENT (Phase 3) ===== */
 function aux_chat_request($prompt, $options = []) {
-    $timeout = $options['timeout'] ?? 60;
-    $maxTokens = $options['max_tokens'] ?? 512;
-    $temperature = $options['temperature'] ?? 0.3;
+    @set_time_limit(300);
     
-    $govConfig = load_governor_config();
-    $auxPort = $govConfig['aux_port'] ?? 8081;
-    
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL => "http://127.0.0.1:$auxPort/v1/chat/completions",
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => $timeout,
-        CURLOPT_CONNECTTIMEOUT => 5,
-        CURLOPT_POSTFIELDS => json_encode([
+    try {
+        $maxTokens = $options['max_tokens'] ?? 512;
+        $temperature = $options['temperature'] ?? 0.3;
+        $maxWaitTime = $options['max_wait'] ?? 180;
+        $pollInterval = $options['poll_interval'] ?? 2;
+        
+        $govConfig = load_governor_config();
+        $auxPort = $govConfig['aux_port'] ?? 8081;
+        
+        $postBody = [
             'messages' => [['role' => 'user', 'content' => $prompt]],
             'max_tokens' => $maxTokens,
             'temperature' => $temperature,
             'stream' => false
-        ]),
-        CURLOPT_HTTPHEADER => ['Content-Type: application/json']
+        ];
+        
+        $jsonBody = json_encode($postBody);
+        if ($jsonBody === false) {
+            return ['success' => false, 'error' => 'JSON encode failed: ' . json_last_error_msg()];
+        }
+        
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => "http://127.0.0.1:$auxPort/v1/chat/completions",
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $maxWaitTime,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_POSTFIELDS => $jsonBody,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json']
+        ]);
+        
+        $mh = curl_multi_init();
+        curl_multi_add_handle($mh, $ch);
+        
+        $startTime = time();
+        $running = null;
+        $lastHealthCheck = 0;
+        
+        do {
+            $status = curl_multi_exec($mh, $running);
+            
+            $now = time();
+            if ($now - $lastHealthCheck >= $pollInterval) {
+                $lastHealthCheck = $now;
+                $elapsed = $now - $startTime;
+                
+                $health = aux_check_health($auxPort);
+                
+                if ($health['status'] === 'error') {
+                    curl_multi_remove_handle($mh, $ch);
+                    curl_multi_close($mh);
+                    curl_close($ch);
+                    return ['success' => false, 'error' => 'Aux server stopped responding'];
+                }
+                
+                if ($elapsed > $maxWaitTime) {
+                    curl_multi_remove_handle($mh, $ch);
+                    curl_multi_close($mh);
+                    curl_close($ch);
+                    return ['success' => false, 'error' => "Request timed out after {$maxWaitTime}s"];
+                }
+            }
+            
+            if ($running) {
+                curl_multi_select($mh, 1);
+            }
+        } while ($running && $status == CURLM_OK);
+        
+        $result = curl_multi_getcontent($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        
+        curl_multi_remove_handle($mh, $ch);
+        curl_multi_close($mh);
+        curl_close($ch);
+        
+        if ($httpCode === 200 && $result !== false) {
+            $response = json_decode($result, true);
+            $content = trim($response['choices'][0]['message']['content'] ?? '');
+            
+            if (!empty($content)) {
+                return ['success' => true, 'output' => $content];
+            }
+            return ['success' => false, 'error' => 'Empty response from model'];
+        }
+        
+        return ['success' => false, 'error' => $error ?: "HTTP $httpCode"];
+    } catch (Throwable $e) {
+        return ['success' => false, 'error' => 'Exception: ' . $e->getMessage()];
+    }
+}
+
+function aux_check_health($port) {
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => "http://127.0.0.1:$port/health",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 2,
+        CURLOPT_CONNECTTIMEOUT => 1,
     ]);
     
     $result = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
     curl_close($ch);
     
-    if ($httpCode === 200 && $result !== false) {
-        $response = json_decode($result, true);
-        $content = trim($response['choices'][0]['message']['content'] ?? '');
-        
-        if (!empty($content)) {
-            return ['success' => true, 'output' => $content];
-        }
-        return ['success' => false, 'error' => 'Empty response from model'];
+    if ($httpCode === 200) {
+        return ['status' => 'idle', 'healthy' => true];
+    } elseif ($httpCode === 503) {
+        return ['status' => 'processing', 'healthy' => true];
+    } else {
+        return ['status' => 'error', 'healthy' => false];
     }
-    
-    return ['success' => false, 'error' => $error ?: "HTTP $httpCode"];
 }
 
 /* ===== PORT & HEALTH CHECKS (Phase 5) ===== */
@@ -215,14 +289,28 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
     // Create batch file that monitors openOrchestrate.exe and kills llama-server when it exits
     $batchFile = __DIR__ . "/governor/start_{$type}.bat";
     $batchFileWin = str_replace('/', '\\', $batchFile);
+    $pidFile = __DIR__ . "/governor/{$type}_watchdog.pid";
+    $pidFileWin = str_replace('/', '\\', $pidFile);
+    
     $watchdogBat = "@echo off\r\nsetlocal\r\n\r\n";
-    $watchdogBat .= ":: Start llama-server in background\r\n";
+    $watchdogBat .= ":: Start llama-server in background and capture PID\r\n";
     $watchdogBat .= "start \"llama-{$type}\" /B $command\r\n\r\n";
-    $watchdogBat .= ":: Monitor openOrchestrate.exe - when it exits, kill llama-server\r\n";
+    $watchdogBat .= ":: Wait briefly for process to start\r\n";
+    $watchdogBat .= "timeout /t 1 /nobreak >nul\r\n\r\n";
+    $watchdogBat .= ":: Find PID of llama-server on port $port\r\n";
+    $watchdogBat .= "for /f \"tokens=5\" %%a in ('netstat -ano ^| find \":$port \"') do (\r\n";
+    $watchdogBat .= "    echo %%a > \"$pidFileWin\"\r\n";
+    $watchdogBat .= "    set LLAMA_PID=%%a\r\n";
+    $watchdogBat .= "    goto :found_pid\r\n";
+    $watchdogBat .= ")\r\n";
+    $watchdogBat .= ":found_pid\r\n\r\n";
+    $watchdogBat .= ":: Monitor openOrchestrate.exe - when it exits, kill THIS llama-server instance\r\n";
     $watchdogBat .= ":watchloop\r\n";
     $watchdogBat .= "tasklist /fi \"imagename eq openOrchestrate.exe\" 2>nul | find /i \"openOrchestrate.exe\" >nul\r\n";
     $watchdogBat .= "if errorlevel 1 (\r\n";
-    $watchdogBat .= "    taskkill /f /im llama-server.exe >nul 2>&1\r\n";
+    $watchdogBat .= "    if defined LLAMA_PID (\r\n";
+    $watchdogBat .= "        taskkill /f /pid %LLAMA_PID% >nul 2>&1\r\n";
+    $watchdogBat .= "    )\r\n";
     $watchdogBat .= "    exit /b\r\n";
     $watchdogBat .= ")\r\n";
     $watchdogBat .= "timeout /t 2 /nobreak >nul\r\n";
@@ -810,7 +898,10 @@ Your response (number or NULL):";
                     'velocity_recall_prompt' => trim($data['velocity_recall_prompt'] ?? '') ?: DEFAULT_CONFIG['velocity_recall_prompt'],
                     'enable_pruning' => filter_var($data['enable_pruning'] ?? true, FILTER_VALIDATE_BOOLEAN),
                     'prune_threshold' => max(100, min(10000, (int)($data['prune_threshold'] ?? 1500))),
-                    'prune_prompt' => trim($data['prune_prompt'] ?? DEFAULT_CONFIG['prune_prompt']) ?: DEFAULT_CONFIG['prune_prompt']
+                    'prune_prompt' => trim($data['prune_prompt'] ?? DEFAULT_CONFIG['prune_prompt']) ?: DEFAULT_CONFIG['prune_prompt'],
+                    'text_system_prompt' => trim($data['text_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.'),
+                    'code_system_prompt' => trim($data['code_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.'),
+                    'medical_system_prompt' => trim($data['medical_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.')
                 ];
                 
                 $configFile = "$governorDir/config.json";
@@ -939,7 +1030,23 @@ Your response (number or NULL):";
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script>
+            // Global function for copying code blocks
+            function copyCodeToClipboard(button) {
+                const codeBlock = button.closest('.code-block');
+                const code = codeBlock.querySelector('code').textContent;
+                
+                navigator.clipboard.writeText(code).then(() => {
+                    button.classList.add('copied');
+                    setTimeout(() => {
+                        button.classList.remove('copied');
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy code:', err);
+                });
+            }
+            
             class LlamaChat {
                 constructor() {
                     this.messages = [];
@@ -985,14 +1092,17 @@ Your response (number or NULL):";
                         velocityThreshold: 40,
                         velocityCharThreshold: 1500,
                         velocityIndexPrompt: 'Create a brief, descriptive title (max 10 words) that captures the key topic or intent of this message. Return ONLY the title, nothing else.',
-                        velocityRecallPrompt: 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL'
+                        velocityRecallPrompt: 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL',
+                        textSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.',
+                        codeSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.',
+                        medicalSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.'
                     };
                     this.availableModels = [];
                     this.vramInfo = null;
                     this.currentExpert = null;
                     this.isRoutingEnabled = true;
                     
-                    // Velocity Recall state
+                    // Velocity Index state
                     this.velocityIndex = [];
                     this.velocityRecallCount = 0;
                     this.recalledMessage = null;
@@ -1005,7 +1115,51 @@ Your response (number or NULL):";
                     this.SERVER_URL = 'http://localhost:8080';
                     
                     this.initElements();
+                    this.initAudioChimes();
                     this.init();
+                }
+                
+                // ==================== AUDIO CHIMES ====================
+                
+                initAudioChimes() {
+                    // DON'T create audio context yet - wait for user gesture
+                    this.audioContext = null;
+                    this.audioChimeEnabled = true; // Default enabled
+                    
+                    // Wire up the toggle in settings
+                    const audioToggle = document.getElementById('enableAudioChime');
+                    if (audioToggle) {
+                        audioToggle.addEventListener('change', () => {
+                            this.audioChimeEnabled = audioToggle.checked;
+                        });
+                    }
+                }
+                
+                playCompletionDing() {
+                    if (!this.audioChimeEnabled) return;
+                    
+                    // Create context on first play (after user gesture)
+                    if (!this.audioContext) {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    const now = this.audioContext.currentTime;
+                    
+                    // Quick pleasant blip
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.audioContext.destination);
+                    
+                    oscillator.frequency.value = 800;
+                    oscillator.type = 'sine';
+                    
+                    gainNode.gain.setValueAtTime(0.15, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    
+                    oscillator.start(now);
+                    oscillator.stop(now + 0.1);
                 }
                 
                 // ==================== PIPELINE ENGINE ====================
@@ -1135,28 +1289,43 @@ Your response (number or NULL):";
                         const { done, value } = await reader.read();
                         if (done) break;
 
-                        for (const line of decoder.decode(value).split('\n')) {
+                        const chunk = decoder.decode(value);
+                        
+                        for (const line of chunk.split('\n')) {
                             if (!line.startsWith('data: ')) continue;
                             const data = line.slice(6);
                             if (data === '[DONE]') {
                                 this.isStreaming = false;
                                 continue;
                             }
-                            const token = JSON.parse(data)?.choices?.[0]?.delta?.content;
-                            if (token) {
-                                content += token;
-                                contentDiv.innerHTML =
-                                    this.formatContent(content) + '<span class="typing-cursor"></span>';
-                                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+                            try {
+                                const parsed = JSON.parse(data);
+                                const token = parsed?.choices?.[0]?.delta?.content;
+                                if (token) {
+                                    content += token;
+                                    contentDiv.innerHTML =
+                                        this.formatContent(content) + '<span class="typing-cursor"></span>';
+                                    this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+                                }
+                            } catch (parseErr) {
+                                // Ignore parse errors on partial chunks
                             }
                         }
                     }
 
                     contentDiv.innerHTML = this.formatContent(content);
+                    this.highlightCodeBlocks(assistantDiv);
+                    
                     this.messages.push({ role: 'assistant', content, timestamp: new Date().toISOString() });
                     this.removeStopButton(assistantDiv);
                     this.addMessageActions(assistantDiv, this.messages.length - 1);
                     assistantDiv.id = '';
+                    
+                    // Set status to Ready immediately so UI feels snappy
+                    this.updateStatus('');
+                    
+                    // Play completion ding immediately
+                    this.playCompletionDing();
                 }
                 
                 async stageFinalize(ctx) {
@@ -1179,7 +1348,6 @@ Your response (number or NULL):";
                     this.isLoading = false;
                     this.isStreaming = false;
                     this.updateSendButton();
-                    this.updateStatus('');
                 }
                 
                 // ==================== REFACTORED sendMessage ====================
@@ -1257,13 +1425,18 @@ Your response (number or NULL):";
                     this.expertServerStatus = this.$('expertServerStatus');
                     this.auxServerStatus = this.$('auxServerStatus');
                     
+                    // System prompt elements
+                    this.textSystemPrompt = this.$('textSystemPrompt');
+                    this.codeSystemPrompt = this.$('codeSystemPrompt');
+                    this.medicalSystemPrompt = this.$('medicalSystemPrompt');
+                    
                     // Startup overlay
                     this.startupOverlay = this.$('startupOverlay');
                     this.startupTitle = this.$('startupTitle');
                     this.startupMessage = this.$('startupMessage');
                     this.startupError = this.$('startupError');
                     
-                    // Velocity Recall elements
+                    // Velocity Index elements
                     this.velocityEnabled = this.$('velocityEnabled');
                     this.velocityThreshold = this.$('velocityThreshold');
                     this.velocityCharThreshold = this.$('velocityCharThreshold');
@@ -1394,6 +1567,14 @@ Your response (number or NULL):";
                     this.$('closeSettingsBtn').addEventListener('click', () => this.closeSettings());
                     this.$('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
                     this.enablePruning.addEventListener('change', () => this.updatePruningUI());
+                    
+                    // Accordion toggles
+                    document.querySelectorAll('.accordion-header').forEach(header => {
+                        header.addEventListener('click', () => {
+                            const accordion = header.closest('.settings-accordion');
+                            accordion.classList.toggle('open');
+                        });
+                    });
                     
                     // Governor model selectors
                     this.governorTextModel.addEventListener('change', () => this.updateModelSizeDisplay());
@@ -1631,6 +1812,14 @@ Your response (number or NULL):";
                 
                 async prepareMessagesForApi() {
                     const result = [];
+                    
+                    // Add system prompt - use the working default
+                    const systemPrompt = 'You are a helpful assistant. Provide detailed, accurate responses.';
+                    
+                    result.push({
+                        role: 'system',
+                        content: systemPrompt
+                    });
                     
                     for (const msg of this.messages) {
                         // Skip indexed messages UNLESS they've been recalled
@@ -1892,7 +2081,7 @@ Your response (number or NULL):";
                         `).join('')}</div>`;
                     }
                     
-                    // Add Velocity Recall badge if message is indexed
+                    // Add velocity index badge if message is indexed
                     let velocityBadgeHtml = '';
                     if (msg?.velocityIndexed && !msg?.velocityRecalled) {
                         velocityBadgeHtml = `<div class="indexed-badge">
@@ -2052,6 +2241,7 @@ Your response (number or NULL):";
                             msg.prunedContent = newContent;
                             this.rerenderMessages();
                             await this.saveChatToHistory();
+                    this.playCompletionDing();
                             await this.updateTokenUsage();
                         } else {
                             cancel();
@@ -2129,8 +2319,17 @@ Your response (number or NULL):";
                         return;
                     }
                     
+                    // Find the actual DOM element for this message
+                    // Count which user message this is (0-indexed among user messages only)
+                    let userMessageIndex = 0;
+                    for (let i = 0; i < index; i++) {
+                        if (this.messages[i].role === 'user') {
+                            userMessageIndex++;
+                        }
+                    }
+                    
                     const userMessages = document.querySelectorAll('.message.user-message');
-                    const msgEl = userMessages[index];
+                    const msgEl = userMessages[userMessageIndex];
                     if (!msgEl) return;
                     
                     const contentDiv = msgEl.querySelector('.message-content');
@@ -2160,13 +2359,31 @@ Your response (number or NULL):";
                             
                             const hasAssistantAfter = this.messages.slice(index + 1).some(m => m.role === 'assistant');
                             if (hasAssistantAfter) {
-                                this.messages = this.messages.slice(0, index + 1);
+                                // Delete from this user message onwards (like regenerateMessage does)
+                                this.messages.splice(index);
                                 this.rerenderMessages();
-                                this.regenerateFromUser(newContent);
+                                
+                                // Regenerate response using the pipeline (same as regenerateMessage)
+                                const ctx = {
+                                    userMessage: newContent,
+                                    attachments: msg.attachments || [],
+                                    aborted: false
+                                };
+                                
+                                await this.runPipeline([
+                                    this.stageBuildMessage,
+                                    this.stageCommitUserMessage,
+                                    this.stageAutoPruneUser,
+                                    this.stageVelocity,
+                                    this.stageRouting,
+                                    this.stageGenerate,
+                                    this.stageFinalize
+                                ], ctx);
                             } else {
                                 this.rerenderMessages();
                             }
                             await this.saveChatToHistory();
+                    this.playCompletionDing();
                             this.updateTokenUsage();
                         } else {
                             cancel();
@@ -2205,13 +2422,13 @@ Your response (number or NULL):";
                     this.showDialog(this.confirmDialog);
                 }
                 
-                regenerateMessage(index) {
+                async regenerateMessage(index) {
                     if (this.isStreaming) this.stopStreaming();
                     this.hideLoading();
                     
                     // Find the user message before this assistant message
                     let userIndex = -1;
-                    for (let i = index; i >= 0; i--) {
+                    for (let i = index - 1; i >= 0; i--) {
                         if (this.messages[i].role === 'user') {
                             userIndex = i;
                             break;
@@ -2219,137 +2436,52 @@ Your response (number or NULL):";
                     }
                     if (userIndex === -1) return;
                     
-                    const content = this.messages[userIndex].content;
-                    this.messages = this.messages.slice(0, userIndex + 1);
+                    // Get the user message content
+                    const userContent = this.messages[userIndex].content;
+                    const userAttachments = this.messages[userIndex].attachments || [];
+                    
+                    // Delete from the USER message onwards
+                    this.messages.splice(userIndex);
                     this.rerenderMessages();
-                    this.chatInput.value = '';
-                    this.adjustTextareaHeight();
-                    this.regenerateFromUser(content);
+                    
+                    // Call pipeline directly (don't use sendMessage - it reads from chatInput)
+                    const ctx = {
+                        userMessage: userContent,
+                        attachments: userAttachments,
+                        aborted: false
+                    };
+
+                    await this.runPipeline([
+                        this.stageBuildMessage,
+                        this.stageCommitUserMessage,
+                        this.stageAutoPruneUser,
+                        this.stageVelocity,
+                        this.stageRouting,
+                        this.stageGenerate,
+                        this.stageFinalize
+                    ], ctx);
                 }
                 
-                async regenerateFromUser(content) {
-                    if (!this.serverAvailable) return;
-                    
-                    this.showLoading();
-                    this.isLoading = true;
-                    this.isStreaming = true;
-                    this.updateSendButton();
-                    
-                    try {
-                        const messagesForApi = await this.prepareMessagesForApi();
-                        this.updateStatus('Generating Response', 'generating');
-                        
-                        const maxResponseTokens = Math.floor(this.tokenTracker.maxContextLength * 0.4);
-                        const response = await fetch(`${this.SERVER_URL}/v1/chat/completions`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                messages: messagesForApi,
-                                stream: true,
-                                temperature: 0.7,
-                                max_tokens: maxResponseTokens
-                            })
-                        });
-                        
-                        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-                        
-                        const assistantDiv = this.createStreamingMessage();
-                        const contentDiv = assistantDiv.querySelector('.message-content');
-                        this.hideLoading();
-                        
-                        this.streamReader = response.body.getReader();
-                        const decoder = new TextDecoder();
-                        let accumulated = '';
-                        this.addStopButton(assistantDiv);
-                        
-                        while (this.isStreaming) {
-                            const { done, value } = await this.streamReader.read();
-                            if (done) break;
-                            
-                            for (const line of decoder.decode(value).split('\n')) {
-                                if (!line.startsWith('data: ')) continue;
-                                const data = line.slice(6);
-                                if (data === '[DONE]') {
-                                    this.isStreaming = false;
-                                    continue;
-                                }
-                                try {
-                                    const token = JSON.parse(data).choices[0]?.delta?.content || '';
-                                    if (token) {
-                                        accumulated += token;
-                                        contentDiv.innerHTML = this.formatContent(accumulated) + '<span class="typing-cursor"></span>';
-                                        // Retrigger fade animation
-                                        contentDiv.classList.remove('streaming-text');
-                                        void contentDiv.offsetWidth;
-                                        contentDiv.classList.add('streaming-text');
-                                        this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
-                                    }
-                                } catch {}
-                            }
-                        }
-                        
-                        contentDiv.classList.remove('streaming-text');
-                        contentDiv.innerHTML = this.formatContent(accumulated);
-                        this.messages.push({ role: 'assistant', content: accumulated, timestamp: new Date().toISOString() });
-                        this.removeStopButton(assistantDiv);
-                        this.addMessageActions(assistantDiv, this.messages.length - 1);
-                        assistantDiv.id = '';
-                        
-                        // AUTOMATIC PRUNING: Prune the assistant response if it exceeds character threshold
-                        if (this.pruningConfig.enabled && this.governorConfig.auxModel) {
-                            const lastMessage = this.messages[this.messages.length - 1];
-                            const contentLength = lastMessage.content.length;
-                            
-                            if (contentLength >= this.pruningConfig.threshold) {
-                                this.updateStatus('Pruning response...', 'pruning');
-                                const pruned = await this.pruneMessage(lastMessage.content);
-                                
-                                if (pruned) {
-                                    const origTokens = await this.countTokens(lastMessage.content);
-                                    const sumTokens = await this.countTokens(pruned);
-                                    
-                                    lastMessage.prunedContent = pruned;
-                                    this.tokenTracker.prunedMessages.add(lastMessage.timestamp);
-                                    if (origTokens !== null && sumTokens !== null) {
-                                        this.tokenTracker.savedTokens += Math.max(0, origTokens - sumTokens);
-                                    }
-                                    
-                                    this.rerenderMessages();
-                                }
-                                this.updateStatus('');
-                            }
-                        }
-                        
-                        await this.saveChatToHistory();
-                        await this.updateTokenUsage();
-                    } catch (error) {
-                        document.getElementById('streamingMessage')?.remove();
-                        if (error.message.includes('fetch') || error.message.includes('network') || error.name === 'TypeError') {
-                            this.setServerUnavailable(error.message);
-                            this.addMessage('assistant', `Connection error: Could not reach the server at ${this.SERVER_URL}`);
-                        } else {
-                            this.addMessage('assistant', `Error: ${error.message}`);
-                        }
-                        await this.updateTokenUsage();
-                    } finally {
-                        this.updateStatus('');
-                        this.isLoading = false;
-                        this.isStreaming = false;
-                        this.updateSendButton();
-                    }
-                }
                 
                 rerenderMessages() {
+                    // Remove all message elements including any leftover streaming message
                     this.messagesContainer.querySelectorAll('.message').forEach(el => el.remove());
+                    const leftoverStreaming = document.getElementById('streamingMessage');
+                    if (leftoverStreaming) leftoverStreaming.remove();
+                    
                     this.messages.forEach((msg, i) => {
                         const el = this.createMessageElement(msg.role, msg.content, i, msg.attachments);
                         this.messagesContainer.appendChild(el);
+                        this.highlightCodeBlocks(el);
                     });
                     this.welcomeScreen.classList.toggle('hidden', this.messages.length > 0);
                     this.updateTokenUsage();
                 }
                 
                 formatContent(content) {
+                    // Trim leading/trailing whitespace to prevent empty space in UI
+                    content = content.trim();
+                    
                     // Escape HTML first
                     let html = content
                         .replace(/&/g, '&amp;')
@@ -2358,7 +2490,46 @@ Your response (number or NULL):";
                     
                     // Code blocks (do first to protect content inside)
                     html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-                        return `<pre><code class="language-${lang || 'text'}">${code.trim()}</code></pre>`;
+                        const language = lang || 'text';
+                        const displayLang = language.charAt(0).toUpperCase() + language.slice(1);
+                        
+                        // Check if there's a comment-based separator (# Example, // Example, etc.)
+                        // Split the code at that point
+                        const lines = code.split('\n');
+                        let codeLines = [];
+                        let exampleLines = [];
+                        let foundSeparator = false;
+                        
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            
+                            // Detect comment-based separators in various languages
+                            const isExampleSeparator = 
+                                /^#\s*(Example|Usage|Output)/i.test(trimmed) ||      // Python, Ruby, Shell
+                                /^\/\/\s*(Example|Usage|Output)/i.test(trimmed) ||   // C, C++, JavaScript, Java
+                                /^\/\*\s*(Example|Usage|Output)/i.test(trimmed) ||   // Multi-line comments
+                                /^--\s*(Example|Usage|Output)/i.test(trimmed);       // SQL, Lua
+                            
+                            if (isExampleSeparator && codeLines.length > 0) {
+                                foundSeparator = true;
+                            }
+                            
+                            if (foundSeparator) {
+                                exampleLines.push(line);
+                            } else {
+                                codeLines.push(line);
+                            }
+                        }
+                        
+                        // Build result - main code block
+                        let result = `<div class="code-block"><div class="code-header"><span class="code-lang">${displayLang}</span><button class="copy-btn" onclick="copyCodeToClipboard(this)" title="Copy code"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div><pre><code class="language-${language}">${codeLines.join('\n').trim()}</code></pre></div>`;
+                        
+                        // If there's example code, add it as a separate code block
+                        if (exampleLines.length > 0) {
+                            result += `\n\n<div class="code-block"><div class="code-header"><span class="code-lang">${displayLang}</span><button class="copy-btn" onclick="copyCodeToClipboard(this)" title="Copy code"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button></div><pre><code class="language-${language}">${exampleLines.join('\n').trim()}</code></pre></div>`;
+                        }
+                        
+                        return result;
                     });
                     
                     // Tables
@@ -2410,14 +2581,36 @@ Your response (number or NULL):";
                     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
                     html = html.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
                     
-                    // Line breaks (but not inside pre/table)
+                    // Line breaks (but not inside pre/code blocks)
+                    // First, protect code block content by replacing newlines with a placeholder
+                    const codeBlocks = [];
+                    html = html.replace(/<pre><code[^>]*>[\s\S]*?<\/code><\/pre>/g, (match) => {
+                        codeBlocks.push(match);
+                        return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+                    });
+                    
+                    // Now replace newlines with <br> in the rest
                     html = html.replace(/\n/g, '<br>');
+                    
+                    // Restore code blocks
+                    codeBlocks.forEach((block, i) => {
+                        html = html.replace(`__CODE_BLOCK_${i}__`, block);
+                    });
                     
                     // Clean up extra breaks after block elements
                     html = html.replace(/<\/(table|ul|ol|pre|h[2-4])><br>/g, '</$1>');
                     html = html.replace(/<br><(table|ul|ol|pre|h[2-4])/g, '<$1');
                     
                     return html;
+                }
+                
+                highlightCodeBlocks(element) {
+                    // Apply syntax highlighting to all code blocks in the element
+                    if (typeof hljs !== 'undefined') {
+                        element.querySelectorAll('pre code').forEach(block => {
+                            hljs.highlightElement(block);
+                        });
+                    }
                 }
                 
                 showLoading() {
@@ -2444,6 +2637,7 @@ Your response (number or NULL):";
                 
                 async createNewChat() {
                     if (this.messages.length > 0) await this.saveChatToHistory();
+                    this.playCompletionDing();
                     
                     this.currentChatId = this.generateId();
                     this.messages = [];
@@ -2452,7 +2646,7 @@ Your response (number or NULL):";
                     this.tokenTracker.lastPrunedIndex = -1;
                     this.tokenTracker.unableToPrune = false;
                     
-                    // Clear Velocity Recall
+                    // Clear velocity index
                     this.velocityIndex = [];
                     this.recalledMessage = null;
                     this.velocityRecallCount = 0;
@@ -2590,6 +2784,7 @@ Your response (number or NULL):";
                         this.messages.forEach((msg, i) => {
                             const el = this.createMessageElement(msg.role, msg.content, i, msg.attachments);
                             this.messagesContainer.appendChild(el);
+                            this.highlightCodeBlocks(el);
                         });
                         
                         this.welcomeScreen.classList.toggle('hidden', this.messages.length > 0);
@@ -2665,6 +2860,7 @@ Your response (number or NULL):";
                         this.messages.splice(this.messageToDelete, 1);
                         this.rerenderMessages();
                         await this.saveChatToHistory();
+                    this.playCompletionDing();
                         await this.updateTokenUsage();
                         this.hideDialog(this.confirmDialog);
                         this.messageToDelete = null;
@@ -2752,7 +2948,10 @@ Your response (number or NULL):";
                             velocityThreshold: configData.config.velocity_threshold || 40,
                             velocityCharThreshold: configData.config.velocity_char_threshold || 1500,
                             velocityIndexPrompt: configData.config.velocity_index_prompt || this.governorConfig.velocityIndexPrompt,
-                            velocityRecallPrompt: configData.config.velocity_recall_prompt || this.governorConfig.velocityRecallPrompt
+                            velocityRecallPrompt: configData.config.velocity_recall_prompt || this.governorConfig.velocityRecallPrompt,
+                            textSystemPrompt: configData.config.text_system_prompt || this.governorConfig.textSystemPrompt,
+                            codeSystemPrompt: configData.config.code_system_prompt || this.governorConfig.codeSystemPrompt,
+                            medicalSystemPrompt: configData.config.medical_system_prompt || this.governorConfig.medicalSystemPrompt
                         };
                         
                         this.pruningConfig.enabled = configData.config.enable_pruning !== false;
@@ -2804,7 +3003,18 @@ Your response (number or NULL):";
                     this.governorMedicalEnabled.checked = this.governorConfig.medicalEnabled !== false;
                     this.auxContextLength.value = this.governorConfig.auxContextLength || 2048;
                     
-                    // Velocity Recall settings
+                    // System prompts
+                    if (this.textSystemPrompt) {
+                        this.textSystemPrompt.value = this.governorConfig.textSystemPrompt || '';
+                    }
+                    if (this.codeSystemPrompt) {
+                        this.codeSystemPrompt.value = this.governorConfig.codeSystemPrompt || '';
+                    }
+                    if (this.medicalSystemPrompt) {
+                        this.medicalSystemPrompt.value = this.governorConfig.medicalSystemPrompt || '';
+                    }
+                    
+                    // Velocity Index settings
                     if (this.velocityEnabled) {
                         this.velocityEnabled.checked = this.governorConfig.velocityEnabled !== false;
                     }
@@ -2931,12 +3141,15 @@ Your response (number or NULL):";
                         throw new Error(`No ${expertType.toLowerCase()} model configured`);
                     }
                     
+                    // Calculate safe context size based on model file size
+                    const contextSize = this.calculateSafeContext(model);
+                    
                     const result = await this.apiCall('start_server', {
                         type: 'expert',
                         model: model,
                         port: this.governorConfig.expertPort,
                         cpu_only: false,
-                        context_size: 4096
+                        context_size: contextSize
                     });
                     
                     if (result.success) {
@@ -2947,10 +3160,56 @@ Your response (number or NULL):";
                     }
                 }
                 
+                calculateSafeContext(modelFilename) {
+                    // Find model size in bytes
+                    const modelInfo = this.availableModels.find(m => m.filename === modelFilename);
+                    const modelSizeMB = modelInfo.size / (1024 * 1024);
+                    const modelSizeGB = modelSizeMB / 1024;
+                    
+                    // Require actual VRAM detection - no fallback
+                    if (!this.vramInfo?.total) {
+                        console.error('[Governor] VRAM not detected! Cannot calculate safe context.');
+                        return 2048; // Safe minimum if detection failed
+                    }
+                    
+                    const vramTotalMB = this.vramInfo.total;
+                    
+                    // Reserve 10% of total VRAM for system headroom
+                    const vramReserveMB = vramTotalMB * 0.10;
+                    const vramAvailableMB = Math.max(0, vramTotalMB - vramReserveMB);
+                    
+                    // Model uses roughly its file size in VRAM when loaded
+                    const vramForContextMB = Math.max(0, vramAvailableMB - modelSizeMB);
+                    
+                    // KV cache memory scales with model hidden size and layers
+                    // These estimates are VERY conservative to ensure stability
+                    // Better to have working generation with less context than crashes
+                    let mbPer1kContext;
+                    if (modelSizeGB < 1) {
+                        mbPer1kContext = 100;   // ~100MB per 1K context for tiny models
+                    } else if (modelSizeGB < 3) {
+                        mbPer1kContext = 200;   // ~200MB per 1K context for small models
+                    } else if (modelSizeGB < 8) {
+                        mbPer1kContext = 400;   // ~400MB per 1K context for medium models
+                    } else {
+                        mbPer1kContext = 800;   // ~800MB per 1K context for large models
+                    }
+                    
+                    // Calculate: available MB / (MB per 1K tokens) = max K tokens, then * 1000
+                    let context = Math.floor((vramForContextMB / mbPer1kContext) * 1000);
+                    
+                    // Clamp to reasonable bounds - max 8K to be safe
+                    context = Math.max(512, Math.min(context, 8192));
+                    
+                    // Round down to nearest 256 for cleaner numbers
+                    context = Math.floor(context / 256) * 256;
+                    
+                    return context;
+                }
+                
                 async switchExpert(newExpertType) {
                     if (this.currentExpert === newExpertType) return true;
                     
-                    console.log(`[Governor] Switching expert: ${this.currentExpert} → ${newExpertType}`);
                     this.updateStatus('Switching models...', 'switching');
                     
                     await this.apiCall('stop_server', { type: 'expert' });
@@ -2963,10 +3222,13 @@ Your response (number or NULL):";
                         const expertStatus = status.servers?.find(s => s.type === 'expert');
                         if (expertStatus?.running && expertStatus?.healthy) {
                             this.updateServerStatusUI('expert', expertStatus);
+                            // Update context length from new expert
+                            await this.initModelInfo();
                             return true;
                         }
                         await new Promise(r => setTimeout(r, 1000));
                     }
+                    console.error(`[Governor] Expert server failed to become healthy after 60s`);
                     return false;
                 }
                 
@@ -2987,7 +3249,6 @@ Your response (number or NULL):";
                     
                     const result = await this.auxApiCall('route_query', { message });
                     if (result.success) {
-                        console.log(`[Governor] Routing decision: ${result.route}`);
                         return result.route;
                     }
                     
@@ -2997,10 +3258,10 @@ Your response (number or NULL):";
                     return 'TEXT';
                 }
                 
-                // ===== Velocity Recall =====
+                // ===== VELOCITY INDEX =====
                 
                 async velocityIndexCheck() {
-                    // Check if Velocity Recalling is enabled and aux model is available
+                    // Check if velocity indexing is enabled and aux model is available
                     if (!this.governorConfig.velocityEnabled || !this.governorConfig.auxModel) {
                         return;
                     }
@@ -3036,6 +3297,7 @@ Your response (number or NULL):";
                             });
                             
                             await this.saveChatToHistory();
+                    this.playCompletionDing();
                             await this.updateTokenUsage();
                             this.rerenderMessages();
                             this.updateVelocityStatsUI();
@@ -3119,8 +3381,23 @@ Your response (number or NULL):";
                 async initializeGovernor() {
                     if (!this.governorConfig.auxModel) return;
                     
+                    // Detect VRAM first - required for context size calculations
+                    if (!this.vramInfo) {
+                        const vramData = await this.apiCall('detect_vram');
+                        if (vramData.success) {
+                            this.vramInfo = vramData.vram;
+                        }
+                    }
+                    
+                    // Ensure models are scanned so we know their sizes
+                    if (this.availableModels.length === 0) {
+                        const modelsData = await this.apiCall('scan_models');
+                        if (modelsData.success) {
+                            this.availableModels = modelsData.models;
+                        }
+                    }
+                    
                     this.showStartupOverlay('Starting Servers...', 'Initializing the auxiliary model');
-                    console.log('[Governor] Starting auxiliary server...');
                     
                     await this.apiCall('start_server', {
                         type: 'aux',
@@ -3137,7 +3414,6 @@ Your response (number or NULL):";
                         const result = await this.apiCall('server_status');
                         const auxStatus = result.servers?.find(s => s.type === 'aux');
                         if (auxStatus?.running && auxStatus?.healthy) {
-                            console.log('[Governor] Auxiliary server healthy');
                             this.updateServerStatusUI('aux', auxStatus);
                             auxHealthy = true;
                             break;
@@ -3147,7 +3423,6 @@ Your response (number or NULL):";
                     
                     if (auxHealthy && this.governorConfig.textModel) {
                         this.showStartupOverlay('Starting Servers...', 'Initializing the text expert model');
-                        console.log('[Governor] Starting expert server...');
                         
                         await this.startExpertServer('TEXT');
                         await new Promise(r => setTimeout(r, 4000));
@@ -3156,8 +3431,9 @@ Your response (number or NULL):";
                             const result = await this.apiCall('server_status');
                             const expertStatus = result.servers?.find(s => s.type === 'expert');
                             if (expertStatus?.running && expertStatus?.healthy) {
-                                console.log('[Governor] Expert server healthy');
                                 this.updateServerStatusUI('expert', expertStatus);
+                                // Update context length from expert
+                                await this.initModelInfo();
                                 break;
                             }
                             await new Promise(r => setTimeout(r, 1000));
@@ -3204,7 +3480,10 @@ Your response (number or NULL):";
                         velocity_recall_prompt: this.velocityRecallPrompt?.value?.trim() || this.governorConfig.velocityRecallPrompt,
                         enable_pruning: this.enablePruning.checked,
                         prune_threshold: Math.max(100, Math.min(10000, parseInt(this.pruneThreshold.value) || 1500)),
-                        prune_prompt: this.prunePrompt.value.trim() || this.pruningConfig.prunePrompt
+                        prune_prompt: this.prunePrompt.value.trim() || this.pruningConfig.prunePrompt,
+                        text_system_prompt: this.textSystemPrompt?.value?.trim() || this.governorConfig.textSystemPrompt,
+                        code_system_prompt: this.codeSystemPrompt?.value?.trim() || this.governorConfig.codeSystemPrompt,
+                        medical_system_prompt: this.medicalSystemPrompt?.value?.trim() || this.governorConfig.medicalSystemPrompt
                     };
                     
                     this.showStartupOverlay('Saving Settings...', 'Stopping servers and applying changes');
@@ -3424,144 +3703,205 @@ Your response (number or NULL):";
                         </div>
                     </div>
                     
-                    <!-- Expert Models Section -->
-                    <div class="settings-subtitle">Expert Models (GPU)</div>
-                    
-                    <div class="model-select-wrapper">
-                        <div class="model-select-label">
-                            <div class="settings-checkbox" style="margin:0">
-                                <input type="checkbox" id="governorTextEnabled" checked>
-                                <label for="governorTextEnabled">Text Expert</label>
+                    <!-- ACCORDION: Expert Models -->
+                    <div class="settings-accordion open" data-accordion="models">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>Expert Models (GPU)</span>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="model-select-wrapper">
+                                <div class="model-select-label">
+                                    <div class="settings-checkbox" style="margin:0">
+                                        <input type="checkbox" id="governorTextEnabled" checked>
+                                        <label for="governorTextEnabled">Text Expert</label>
+                                    </div>
+                                    <span class="model-size" id="textModelSize"></span>
+                                </div>
+                                <select class="model-select" id="governorTextModel"><option value="">Select a model...</option></select>
+                                <div class="settings-hint">General conversation and text tasks</div>
                             </div>
-                            <span class="model-size" id="textModelSize"></span>
-                        </div>
-                        <select class="model-select" id="governorTextModel"><option value="">Select a model...</option></select>
-                        <div class="settings-hint">General conversation and text tasks</div>
-                    </div>
-                    
-                    <div class="model-select-wrapper">
-                        <div class="model-select-label">
-                            <div class="settings-checkbox" style="margin:0">
-                                <input type="checkbox" id="governorCodeEnabled" checked>
-                                <label for="governorCodeEnabled">Code Expert</label>
+                            
+                            <div class="model-select-wrapper">
+                                <div class="model-select-label">
+                                    <div class="settings-checkbox" style="margin:0">
+                                        <input type="checkbox" id="governorCodeEnabled" checked>
+                                        <label for="governorCodeEnabled">Code Expert</label>
+                                    </div>
+                                    <span class="model-size" id="codeModelSize"></span>
+                                </div>
+                                <select class="model-select" id="governorCodeModel"><option value="">Select a model...</option></select>
+                                <div class="settings-hint">Programming and code-related tasks</div>
                             </div>
-                            <span class="model-size" id="codeModelSize"></span>
-                        </div>
-                        <select class="model-select" id="governorCodeModel"><option value="">Select a model...</option></select>
-                        <div class="settings-hint">Programming and code-related tasks</div>
-                    </div>
-                    
-                    <div class="model-select-wrapper">
-                        <div class="model-select-label">
-                            <div class="settings-checkbox" style="margin:0">
-                                <input type="checkbox" id="governorMedicalEnabled" checked>
-                                <label for="governorMedicalEnabled">Medical Expert</label>
-                            </div>
-                            <span class="model-size" id="medicalModelSize"></span>
-                        </div>
-                        <select class="model-select" id="governorMedicalModel"><option value="">Select a model...</option></select>
-                        <div class="settings-hint">Medical and health-related questions</div>
-                    </div>
-                    
-                    <!-- Control Plane Section -->
-                    <div class="settings-separator"></div>
-                    <div class="settings-subtitle">Control Plane</div>
-                    
-                    <div class="model-select-wrapper">
-                        <div class="model-select-label">
-                            <span>Auxiliary Model</span>
-                            <span class="model-size" id="auxModelSize"></span>
-                        </div>
-                        <select class="model-select" id="governorAuxModel"><option value="">Select a model...</option></select>
-                        <div class="settings-hint">Small model for routing, pruning, and indexing. Runs separately from experts.</div>
-                    </div>
-                    
-                    <div class="settings-row">
-                        <div class="settings-item" style="flex:1">
-                            <label class="settings-label">Context Length</label>
-                            <input type="number" class="settings-input" id="auxContextLength" value="2048" min="256" max="8192" step="256">
-                        </div>
-                        <div class="settings-item" style="flex:1">
-                            <div class="settings-checkbox" style="margin-top:1.75rem">
-                                <input type="checkbox" id="governorAuxCpuOnly" checked>
-                                <label for="governorAuxCpuOnly">CPU-only mode</label>
+                            
+                            <div class="model-select-wrapper">
+                                <div class="model-select-label">
+                                    <div class="settings-checkbox" style="margin:0">
+                                        <input type="checkbox" id="governorMedicalEnabled" checked>
+                                        <label for="governorMedicalEnabled">Medical Expert</label>
+                                    </div>
+                                    <span class="model-size" id="medicalModelSize"></span>
+                                </div>
+                                <select class="model-select" id="governorMedicalModel"><option value="">Select a model...</option></select>
+                                <div class="settings-hint">Medical and health-related questions</div>
                             </div>
                         </div>
                     </div>
-                    <div class="settings-hint">CPU-only keeps VRAM free for expert models</div>
                     
-                    <!-- Context Pruning Section -->
-                    <div class="settings-separator"></div>
-                    <div class="settings-subtitle">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;margin-right:6px"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>
-                        Context Pruning
-                        <span class="pruning-status" id="pruningStatusIndicator">Active</span>
-                    </div>
-                    <div class="settings-hint" style="margin-bottom:1rem">Automatically condenses older messages to preserve context space while retaining key information.</div>
-                    
-                    <div class="settings-item">
-                        <div class="settings-checkbox">
-                            <input type="checkbox" id="enablePruning" checked>
-                            <label for="enablePruning">Enable Context Pruning</label>
+                    <!-- ACCORDION: System Prompts -->
+                    <div class="settings-accordion" data-accordion="prompts">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>System Prompts</span>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="settings-hint" style="margin-bottom:1rem">Customize how each expert model behaves. These prompts are sent at the start of every conversation.</div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Text Expert Prompt</label>
+                                <textarea class="settings-textarea" id="textSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Code Expert Prompt</label>
+                                <textarea class="settings-textarea" id="codeSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Medical Expert Prompt</label>
+                                <textarea class="settings-textarea" id="medicalSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="settings-item">
-                        <label class="settings-label">Character Threshold</label>
-                        <input type="number" class="settings-input" id="pruneThreshold" value="1500" min="100" max="10000">
-                        <div class="settings-hint">Messages shorter than this will be skipped</div>
-                    </div>
-                    
-                    <div class="settings-item">
-                        <label class="settings-label">Pruning Prompt</label>
-                        <textarea class="settings-textarea" id="prunePrompt" rows="2">Condense this message to only the essential information in 2-3 sentences:</textarea>
-                    </div>
-                    
-                    <!-- Velocity Recall Section -->
-                    <div class="settings-separator"></div>
-                    <div class="settings-subtitle">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="width:16px;height:16px;margin-right:6px"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
-                        Velocity Recall
-                    </div>
-                    <div class="settings-hint" style="margin-bottom:1rem">Archives older messages when context fills up, then intelligently recalls relevant context when needed.</div>
-                    
-                    <div class="settings-item">
-                        <div class="settings-checkbox">
-                            <input type="checkbox" id="velocityEnabled" checked>
-                            <label for="velocityEnabled">Enable Velocity Recall</label>
+                    <!-- ACCORDION: Control Plane -->
+                    <div class="settings-accordion" data-accordion="control">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>Control Plane</span>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="model-select-wrapper">
+                                <div class="model-select-label">
+                                    <span>Auxiliary Model</span>
+                                    <span class="model-size" id="auxModelSize"></span>
+                                </div>
+                                <select class="model-select" id="governorAuxModel"><option value="">Select a model...</option></select>
+                                <div class="settings-hint">Small model for routing, pruning, and indexing. Runs separately from experts.</div>
+                            </div>
+                            
+                            <div class="settings-row">
+                                <div class="settings-item" style="flex:1">
+                                    <label class="settings-label">Context Length</label>
+                                    <input type="number" class="settings-input" id="auxContextLength" value="2048" min="256" max="8192" step="256">
+                                </div>
+                                <div class="settings-item" style="flex:1">
+                                    <div class="settings-checkbox" style="margin-top:1.75rem">
+                                        <input type="checkbox" id="governorAuxCpuOnly" checked>
+                                        <label for="governorAuxCpuOnly">CPU-only mode</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="settings-hint">CPU-only keeps VRAM free for expert models</div>
                         </div>
                     </div>
                     
-                    <div class="settings-row">
-                        <div class="settings-item" style="flex:1">
-                            <label class="settings-label">Context Threshold (%)</label>
-                            <input type="number" class="settings-input" id="velocityThreshold" value="40" min="10" max="90">
+                    <!-- ACCORDION: Context Pruning -->
+                    <div class="settings-accordion" data-accordion="pruning">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>Context Pruning</span>
+                            <span class="pruning-status" id="pruningStatusIndicator">Active</span>
                         </div>
-                        <div class="settings-item" style="flex:1">
-                            <label class="settings-label">Character Threshold</label>
-                            <input type="number" class="settings-input" id="velocityCharThreshold" value="1500" min="100" max="10000">
+                        <div class="accordion-content">
+                            <div class="settings-hint" style="margin-bottom:1rem">Automatically condenses older messages to preserve context space while retaining key information.</div>
+                            
+                            <div class="settings-item">
+                                <div class="settings-checkbox">
+                                    <input type="checkbox" id="enablePruning" checked>
+                                    <label for="enablePruning">Enable Context Pruning</label>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Character Threshold</label>
+                                <input type="number" class="settings-input" id="pruneThreshold" value="1500" min="100" max="10000">
+                                <div class="settings-hint">Messages shorter than this will be skipped</div>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Pruning Prompt</label>
+                                <textarea class="settings-textarea" id="prunePrompt" rows="2">Condense this message to only the essential information in 2-3 sentences:</textarea>
+                            </div>
                         </div>
                     </div>
-                    <div class="settings-hint">Start indexing when context exceeds threshold %. Skip messages shorter than character threshold.</div>
                     
-                    <div class="settings-item">
-                        <label class="settings-label">Index Prompt</label>
-                        <textarea class="settings-textarea" id="velocityIndexPrompt" rows="2">Create a brief, descriptive title (max 10 words) that captures the key topic or intent of this message. Return ONLY the title, nothing else.</textarea>
-                    </div>
-                    
-                    <div class="settings-item">
-                        <label class="settings-label">Recall Prompt</label>
-                        <textarea class="settings-textarea" id="velocityRecallPrompt" rows="3">Given the user's new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL</textarea>
-                    </div>
-                    
-                    <div class="velocity-stats" id="velocityStats" style="display:none">
-                        <div class="velocity-stat">
-                            <span class="velocity-stat-label">Indexed</span>
-                            <span class="velocity-stat-value" id="velocityIndexedCount">0</span>
+                    <!-- ACCORDION: Velocity Index -->
+                    <div class="settings-accordion" data-accordion="velocity">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>Velocity Index</span>
                         </div>
-                        <div class="velocity-stat">
-                            <span class="velocity-stat-label">Recalls</span>
-                            <span class="velocity-stat-value" id="velocityRecallCount">0</span>
+                        <div class="accordion-content">
+                            <div class="settings-hint" style="margin-bottom:1rem">Archives older messages when context fills up, then intelligently recalls relevant context when needed.</div>
+                            
+                            <div class="settings-item">
+                                <div class="settings-checkbox">
+                                    <input type="checkbox" id="velocityEnabled" checked>
+                                    <label for="velocityEnabled">Enable Velocity Index</label>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-row">
+                                <div class="settings-item" style="flex:1">
+                                    <label class="settings-label">Context Threshold (%)</label>
+                                    <input type="number" class="settings-input" id="velocityThreshold" value="40" min="10" max="90">
+                                </div>
+                                <div class="settings-item" style="flex:1">
+                                    <label class="settings-label">Character Threshold</label>
+                                    <input type="number" class="settings-input" id="velocityCharThreshold" value="1500" min="100" max="10000">
+                                </div>
+                            </div>
+                            <div class="settings-hint">Start indexing when context exceeds threshold %. Skip messages shorter than character threshold.</div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Index Prompt</label>
+                                <textarea class="settings-textarea" id="velocityIndexPrompt" rows="2">Create a brief, descriptive title (max 10 words) that captures the key topic or intent of this message. Return ONLY the title, nothing else.</textarea>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Recall Prompt</label>
+                                <textarea class="settings-textarea" id="velocityRecallPrompt" rows="3">Given the user's new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL</textarea>
+                            </div>
+                            
+                            <div class="velocity-stats" id="velocityStats" style="display:none">
+                                <div class="velocity-stat">
+                                    <span class="velocity-stat-label">Indexed</span>
+                                    <span class="velocity-stat-value" id="velocityIndexedCount">0</span>
+                                </div>
+                                <div class="velocity-stat">
+                                    <span class="velocity-stat-label">Recalls</span>
+                                    <span class="velocity-stat-value" id="velocityRecallCount">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- ACCORDION: Audio -->
+                    <div class="settings-accordion" data-accordion="audio">
+                        <div class="accordion-header">
+                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                            <span>Audio</span>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="settings-hint" style="margin-bottom:1rem">Configure audio notifications for response completion.</div>
+                            
+                            <div class="settings-item">
+                                <div class="settings-checkbox">
+                                    <input type="checkbox" id="enableAudioChime" checked>
+                                    <label for="enableAudioChime">Enable Completion Sound</label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3630,7 +3970,7 @@ Your response (number or NULL):";
                 <button class="new-chat-btn" id="newChatBtn"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg><span>New Chat</span></button>
                 <div class="chats-list scrollbar-hidden" id="chatsList"></div>
                 <div class="sidebar-footer">
-                    <span class="sidebar-version">v0.9-R5 © 2026 Technologyst Labs</span>
+                    <span class="sidebar-version">v0.9-R6 © 2026 Technologyst Labs</span>
                 </div>
             </div>
             
@@ -3663,24 +4003,24 @@ Your response (number or NULL):";
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" width="12" height="12">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"/>
                                     </svg>
-                                    Suggested Prompts
+                                    Try a prompt!
                                 </div>
                                 <div class="suggestions-grid" id="suggestionsGrid">
-                                    <button class="suggestion-btn waterfall" style="animation-delay:0ms" data-prompt="Explain quantum computing in simple terms">
-                                        <div class="suggestion-title">Explain quantum computing</div>
-                                        <div class="suggestion-desc">in simple terms</div>
+                                    <button class="suggestion-btn waterfall" style="animation-delay:0ms" data-prompt="Write a short article explaining quantum computing.">
+                                        <div class="suggestion-title">Learn & Create</div>
+                                        <div class="suggestion-desc">Write a short article explaining quantum computing.</div>
                                     </button>
-                                    <button class="suggestion-btn waterfall" style="animation-delay:60ms" data-prompt="Write a Python function to calculate fibonacci numbers">
-                                        <div class="suggestion-title">Write a Python function</div>
-                                        <div class="suggestion-desc">to calculate fibonacci numbers</div>
+                                    <button class="suggestion-btn waterfall" style="animation-delay:60ms" data-prompt="Write a PHP function to calculate fibonacci numbers">
+                                        <div class="suggestion-title">Start your programming journey</div>
+                                        <div class="suggestion-desc">Calculate fibonacci numbers in PHP!</div>
                                     </button>
-                                    <button class="suggestion-btn waterfall" style="animation-delay:120ms" data-prompt="What are the benefits of meditation?">
-                                        <div class="suggestion-title">Benefits of meditation</div>
-                                        <div class="suggestion-desc">for mental health</div>
+                                    <button class="suggestion-btn waterfall" style="animation-delay:120ms" data-prompt="What can I take for a headache?">
+                                        <div class="suggestion-title">Seek health advice</div>
+                                        <div class="suggestion-desc">What can I take for a headache?</div>
                                     </button>
-                                    <button class="suggestion-btn waterfall" style="animation-delay:180ms" data-prompt="Create a recipe for chocolate chip cookies">
-                                        <div class="suggestion-title">Chocolate chip cookies</div>
-                                        <div class="suggestion-desc">recipe</div>
+                                    <button class="suggestion-btn waterfall" style="animation-delay:180ms" data-prompt="How do you make a good carrot cake?">
+                                        <div class="suggestion-title">Bake with brand new recipes!</div>
+                                        <div class="suggestion-desc">Carrot Cake</div>
                                     </button>
                                 </div>
                             </div>
@@ -3787,8 +4127,125 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
 .message-attachment-chip svg { width: 10px; height: 10px; opacity: 0.7 }
 .message-content { line-height: 1.7; color: var(--text-secondary) }
 .user-message .message-content { color: var(--text-primary) }
-.message-content pre { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); padding: 1rem; overflow-x: auto; margin: .5rem 0 }
-.message-content code { background: var(--glass-bg); border-radius: var(--radius-xs); padding: .125rem .5rem; font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Consolas', monospace; font-size: .85em; border: 1px solid var(--glass-border) }
+/* Code block - single container */
+.code-block {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--blur-md)) saturate(150%);
+    -webkit-backdrop-filter: blur(var(--blur-md)) saturate(150%);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    margin: .75rem 0;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+}
+
+/* Thin header bar at the very top */
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid var(--glass-border);
+    height: 33px;
+    padding-top: 5px;
+}
+
+.code-lang {
+    font-size: .65rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-xs);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.copy-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: var(--text-primary);
+}
+
+.copy-btn svg {
+    width: 12px;
+    height: 12px;
+    display: block;
+}
+
+.copy-btn.copied {
+    color: var(--accent-primary);
+    background: var(--accent-primary-soft);
+    border-color: var(--accent-primary);
+}
+
+/* Code content */
+.code-block pre {
+    margin: 0;
+    padding: 1rem;
+    overflow-x: auto;
+    background: transparent;
+    border: none;
+}
+
+.code-block pre code {
+    display: block;
+    font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+    font-size: .875em;
+    line-height: 1.6;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: #abb2bf;
+}
+
+/* Syntax highlighting - One Dark theme */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name { color: #c678dd; }
+.hljs-string, .hljs-attr { color: #98c379; }
+.hljs-number, .hljs-literal { color: #d19a66; }
+.hljs-comment, .hljs-quote { color: #5c6370; font-style: italic; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #61afef; }
+.hljs-variable, .hljs-template-variable { color: #e06c75; }
+.hljs-type, .hljs-class .hljs-title { color: #e5c07b; }
+.hljs-tag { color: #e06c75; }
+.hljs-attribute { color: #d19a66; }
+.hljs-symbol, .hljs-bullet { color: #56b6c2; }
+.hljs-addition { color: #98c379; background: rgba(152, 195, 121, 0.1); }
+.hljs-deletion { color: #e06c75; background: rgba(224, 108, 117, 0.1); }
+.hljs-meta { color: #56b6c2; }
+.hljs-params { color: #abb2bf; }
+.hljs-property { color: #e06c75; }
+.hljs-selector-class { color: #e5c07b; }
+.hljs-selector-id { color: #61afef; }
+.hljs-regexp { color: #56b6c2; }
+.hljs-link { color: #61afef; text-decoration: underline; }
+.hljs-doctag { color: #c678dd; }
+.hljs-section { color: #e06c75; }
+
+/* Inline code */
+.message-content code:not(pre code) {
+    background: var(--glass-bg);
+    border-radius: var(--radius-xs);
+    padding: .125rem .5rem;
+    border: 1px solid var(--glass-border);
+    color: var(--accent-primary);
+    font-family: 'SF Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+    font-size: .875em;
+}
 .message-content strong { font-weight: 600; color: var(--text-primary) }
 .message-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9em; background: rgba(0, 0, 0, 0.2); border-radius: var(--radius-sm); overflow: hidden }
 .message-content th, .message-content td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid var(--glass-border) }
@@ -3925,8 +4382,17 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
 .settings-checkbox { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem }
 .settings-checkbox input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; border-radius: 5px; accent-color: var(--accent-primary) }
 .settings-checkbox label { font-size: .875rem; font-weight: 500; color: var(--text-secondary); cursor: pointer }
-.settings-separator { height: 1px; background: linear-gradient(90deg, transparent 0%, var(--glass-border-bright) 50%, transparent 100%); margin: 1.5rem 0 }
-.settings-subtitle { font-size: .8rem; font-weight: 600; color: var(--text-tertiary); margin-bottom: .75rem; display: block; text-transform: uppercase; letter-spacing: 0.05em }
+
+/* Accordion Styles */
+.settings-accordion { border: 1px solid var(--glass-border); border-radius: var(--radius-md); margin-bottom: 0.75rem; overflow: hidden; background: rgba(255, 255, 255, 0.02) }
+.accordion-header { display: flex; align-items: center; gap: 0.5rem; padding: 0.875rem 1rem; cursor: pointer; user-select: none; transition: background var(--transition-smooth); font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em }
+.accordion-header:hover { background: rgba(255, 255, 255, 0.04) }
+.accordion-icon { width: 16px; height: 16px; transition: transform 0.3s ease; color: var(--text-quaternary) }
+.settings-accordion.open .accordion-icon { transform: rotate(180deg) }
+.accordion-header .pruning-status { margin-left: auto }
+.accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease; padding: 0 1rem }
+.settings-accordion.open .accordion-content { max-height: 2000px; padding: 0.5rem 1rem 1rem 1rem }
+
 .settings-actions { padding: 1.5rem 2rem; border-top: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.02); display: flex; flex-direction: column; gap: .75rem }
 .settings-btn { width: 100%; padding: .875rem; border-radius: var(--radius-lg); font-weight: 500; font-size: .875rem; cursor: pointer; transition: all var(--transition-smooth); border: none; display: flex; align-items: center; justify-content: center; gap: .5rem; position: relative; overflow: hidden }
 .settings-btn::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, transparent 100%); pointer-events: none }
@@ -4044,8 +4510,6 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
 .server-status.starting { border-color: rgba(255, 214, 10, 0.25); box-shadow: 0 0 8px rgba(255, 214, 10, 0.08), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) }
 .server-status.error .server-status-dot { background: var(--error); box-shadow: 0 0 8px var(--error) }
 .server-status.error { border-color: rgba(255, 69, 58, 0.25); box-shadow: 0 0 8px rgba(255, 69, 58, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05) }
-.settings-subtitle { display: flex; align-items: center; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; margin-top: 0.5rem; }
-.settings-subtitle .pruning-status { margin-left: auto; }
 /* Context meter styling */ .context-meter { height: 6px; border-radius: var(--radius-pill); background: linear-gradient(160deg, rgba(50, 50, 60, 0.5) 0%, rgba(35, 35, 45, 0.6) 100%); border: 1px solid rgba(255, 255, 255, 0.06); overflow: hidden; margin-top: 4px; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 4px rgba(255, 255, 255, 0.02) }
 .context-meter-fill { height: 100%; transition: width var(--transition-smooth); border-radius: var(--radius-pill); position: relative }
 .context-meter-fill::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%); border-radius: var(--radius-pill) var(--radius-pill) 0 0 }
@@ -4057,8 +4521,7 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
 .wmc-wizard { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #1a2332 0%, #0d1117 50%, #1a2838 100%); z-index: 99999; display: flex; align-items: center; justify-content: center; opacity: 0; animation: wmcFadeIn 0.8s ease-out forwards }
 @keyframes wmcFadeIn { to { opacity: 1 } }
 .wmc-container { width: 100%; height: 100%; display: flex; flex-direction: column; position: relative }
-.wmc-header { padding: 1.25rem 3rem; background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.25) 30%, rgba(255, 255, 255, 0.15) 70%, rgba(255, 255, 255, 0.08) 100%); border-bottom: 1px solid rgba(91, 196, 232, 0.6); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 3px 12px rgba(0, 0, 0, 0.5); backdrop-filter: blur(30px); position: relative; overflow: hidden }
-.wmc-header::after { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%); pointer-events: none }
+.wmc-header { padding: 1.25rem 3rem; background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.04) 100%); border-bottom: 1px solid rgba(91, 196, 232, 0.3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 3px rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px); position: relative; overflow: hidden }
 .wmc-header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%) }
 .wmc-header-title { font-size: 1.75rem; font-weight: 300; color: #ffffff; letter-spacing: 0.02em; margin-bottom: 0; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) }
 .wmc-header-subtitle { font-size: 0.875rem; color: rgba(255, 255, 255, 0.6); font-weight: 300 }
@@ -4092,16 +4555,13 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
 .wmc-recommendation { background: rgba(91, 196, 232, 0.08); border-left: 3px solid var(--accent-primary); padding: 1.25rem 1.5rem; margin-top: 2rem; border-radius: 0 4px 4px 0 }
 .wmc-recommendation-title { font-size: 0.875rem; font-weight: 600; color: var(--accent-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em }
 .wmc-recommendation-text { font-size: 1rem; color: rgba(255, 255, 255, 0.7); line-height: 1.7 }
-.wmc-footer { padding: 1.25rem 3rem; background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.15) 30%, rgba(255, 255, 255, 0.25) 70%, rgba(255, 255, 255, 0.35) 100%); border-top: 1px solid rgba(91, 196, 232, 0.6); display: flex; justify-content: space-between; align-items: center; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -1px 1px rgba(0, 0, 0, 0.2), 0 -3px 12px rgba(0, 0, 0, 0.5); backdrop-filter: blur(30px); position: relative; overflow: hidden }
-.wmc-footer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%); pointer-events: none }
+.wmc-footer { padding: 1.25rem 3rem; background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.12) 100%); border-top: 1px solid rgba(91, 196, 232, 0.3); display: flex; justify-content: space-between; align-items: center; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 -1px 3px rgba(0, 0, 0, 0.3); backdrop-filter: blur(10px); position: relative; overflow: hidden }
 .wmc-footer::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%) }
 .wmc-btn { padding: 0.875rem 2.5rem; border-radius: 4px; font-size: 1rem; font-weight: 400; cursor: pointer; transition: all 0.3s; border: none; text-transform: capitalize; letter-spacing: 0.02em; min-width: 120px }
-.wmc-btn-back { background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.12) 100%); border: 2px solid rgba(255, 255, 255, 0.4); color: rgba(255, 255, 255, 0.95); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.3); position: relative; overflow: hidden }
-.wmc-btn-back::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%); pointer-events: none }
-.wmc-btn-back:hover { border-color: rgba(255, 255, 255, 0.6); color: #ffffff; background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.25) 50%, rgba(255, 255, 255, 0.18) 100%); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), inset 0 -1px 0 rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.4) }
-.wmc-btn-next { background: linear-gradient(180deg, #90dff7 0%, #6bd0f0 50%, var(--accent-primary) 100%); color: #000000; font-weight: 500; box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 4px 12px rgba(91, 196, 232, 0.5); position: relative; overflow: hidden }
-.wmc-btn-next::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, transparent 100%); pointer-events: none }
-.wmc-btn-next:hover { background: linear-gradient(180deg, #a0e5f9 0%, #7dd8f5 50%, #6bd0f0 100%); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(0, 0, 0, 0.2), 0 6px 16px rgba(91, 196, 232, 0.6); transform: translateY(-1px) }
+.wmc-btn-back { background: transparent; border: 2px solid rgba(255, 255, 255, 0.3); color: rgba(255, 255, 255, 0.7) }
+.wmc-btn-back:hover { border-color: rgba(255, 255, 255, 0.5); color: #ffffff; background: rgba(255, 255, 255, 0.05) }
+.wmc-btn-next { background: var(--accent-primary); color: #000000; font-weight: 500; box-shadow: 0 4px 12px rgba(91, 196, 232, 0.3) }
+.wmc-btn-next:hover { background: #6bd0f0; box-shadow: 0 6px 16px rgba(91, 196, 232, 0.4); transform: translateY(-1px) }
 .wmc-btn-cancel { background: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.08) 100%); color: rgba(255, 255, 255, 0.85); border: 2px solid rgba(255, 255, 255, 0.3); padding: 0.875rem 2rem; cursor: pointer; transition: all 0.3s; border-radius: 4px; box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), inset 0 -1px 0 rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.3); min-width: 120px; position: relative; overflow: hidden }
 .wmc-btn-cancel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, transparent 100%); pointer-events: none }
 .wmc-btn-cancel:hover { color: #ffffff; background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.12) 100%); border-color: rgba(255, 255, 255, 0.45); box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgba(0, 0, 0, 0.15), 0 4px 10px rgba(0, 0, 0, 0.4) }
@@ -4282,10 +4742,16 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
                             <div>
                                 <div class="wmc-section-label" style="margin-bottom: 0.5rem">Context Length</div>
                                 <input type="number" class="wmc-input" id="wmcAuxContext" value="2048" min="512" max="8192" step="512">
+                                <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
+                                    Maximum context window for the auxiliary model
+                                </div>
                             </div>
                             <div>
                                 <div class="wmc-section-label" style="margin-bottom: 0.5rem">Port</div>
                                 <input type="number" class="wmc-input" id="wmcAuxPort" value="8081" min="1024" max="65535">
+                                <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
+                                    Network port for auxiliary model server
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -4319,7 +4785,7 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
                             <div class="wmc-toggle active" id="wmcVelocityToggle">
                                 <div class="wmc-toggle-knob"></div>
                             </div>
-                            <div class="wmc-toggle-label">Enable Velocity Recall System</div>
+                            <div class="wmc-toggle-label">Enable Velocity Memory System</div>
                         </div>
                         <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-left: 71px; margin-top: -0.5rem">
                             Automatically archives and recalls conversation context
@@ -4340,17 +4806,17 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
                     
                     <div class="wmc-settings-grid">
                         <div>
-                            <div class="wmc-section-label">Context Threshold (%)</div>
+                            <div class="wmc-section-label">Velocity Threshold (%)</div>
                             <input type="number" class="wmc-input" id="wmcVelocityThreshold" value="40" min="10" max="90" step="5">
                             <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                When context usage reaches this percentage, older messages are automatically archived. The system will recall them when relevant.
+                                When context usage reaches this percentage, older conversations are automatically archived
                             </div>
                         </div>
                         <div>
-                            <div class="wmc-section-label">Pruning Threshold (Characters)</div>
+                            <div class="wmc-section-label">Pruning Threshold (chars)</div>
                             <input type="number" class="wmc-input" id="wmcPruneThreshold" value="1500" min="500" max="5000" step="100">
                             <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                Messages longer than this are automatically condensed to preserve context space while keeping key information.
+                                Messages longer than this are automatically condensed to preserve context space
                             </div>
                         </div>
                     </div>
@@ -4372,7 +4838,7 @@ body::before { content: ''; position: fixed; inset: 0; background: var(--bg-ambi
                         to the appropriate expert models.
                     </div>
                     <div class="wmc-final-message">
-                        Click <strong>Finish</strong> to start chatting!
+                        Click <strong>Finish</strong> to start using openOrchestrate.
                     </div>
                 </div>
                 <div class="wmc-right">
@@ -4399,6 +4865,8 @@ const WMCWizard = {
     currentPage: 0,
     totalPages: 7,
     availableModels: [],
+    soundtrackStarted: false,
+    soundtrack: null,
 
     init() {
         this.bindEvents();
@@ -4519,6 +4987,11 @@ const WMCWizard = {
     },
 
     nextPage() {
+        // Start soundtrack on FIRST click of Next (user gesture!)
+        if (this.currentPage === 0 && !this.soundtrackStarted) {
+            this.startSoundtrack();
+        }
+        
         if (this.currentPage === this.totalPages - 1) {
             this.saveAndClose();
         } else if (this.currentPage === this.totalPages - 2) {
@@ -4539,7 +5012,89 @@ const WMCWizard = {
 
     cancel() {
         if (confirm('Exit setup wizard?')) {
+            this.stopSoundtrack();
             this.close();
+        }
+    },
+    
+    startSoundtrack() {
+        this.soundtrackStarted = true;
+        
+        // Dynamically load Tone.js only when needed (after user gesture)
+        const loadTone = () => {
+            return new Promise((resolve, reject) => {
+                if (window.Tone) {
+                    resolve();
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js';
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        };
+        
+        loadTone().then(() => {
+            // Create synths
+            const chordSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'sine' },
+                envelope: { attack: 2, decay: 1, sustain: 0.5, release: 3 }
+            }).toDestination();
+            chordSynth.volume.value = -28; // MUCH quieter
+            
+            const bassSynth = new Tone.MonoSynth({
+                oscillator: { type: 'sine' },
+                envelope: { attack: 1.5, decay: 0.8, sustain: 0.3, release: 2 }
+            }).toDestination();
+            bassSynth.volume.value = -32; // Quieter
+            
+            const hihatSynth = new Tone.NoiseSynth({
+                noise: { type: 'white' },
+                envelope: { attack: 0.001, decay: 0.05, sustain: 0 }
+            }).toDestination();
+            hihatSynth.volume.value = -30;
+            
+            // Chord progression: C major -> Am -> F -> G
+            const chords = [
+                ['C4', 'E4', 'G4'],
+                ['A3', 'C4', 'E4'],
+                ['F3', 'A3', 'C4'],
+                ['G3', 'B3', 'D4']
+            ];
+            const bassNotes = ['C2', 'A1', 'F1', 'G1'];
+            
+            // Start Tone.js
+            Tone.start();
+            
+            // Chord loop - MUCH SLOWER (whole notes = 4 beats each)
+            let chordIndex = 0;
+            const chordLoop = new Tone.Loop((time) => {
+                chordSynth.triggerAttackRelease(chords[chordIndex], '1n', time); // Whole note duration
+                bassSynth.triggerAttackRelease(bassNotes[chordIndex], '1n', time);
+                chordIndex = (chordIndex + 1) % 4;
+            }, '1n').start(0); // Trigger every whole note
+            
+            // Hi-hat pattern
+            const hihatLoop = new Tone.Loop((time) => {
+                hihatSynth.triggerAttackRelease('16n', time);
+            }, '8n').start(0);
+            
+            Tone.Transport.bpm.value = 70; // Slower tempo
+            Tone.Transport.start();
+            
+            this.soundtrack = { chordLoop, hihatLoop };
+        }).catch(err => {
+            console.warn('Could not load Tone.js:', err);
+        });
+    },
+    
+    stopSoundtrack() {
+        if (this.soundtrack) {
+            Tone.Transport.stop();
+            this.soundtrack.chordLoop.dispose();
+            this.soundtrack.hihatLoop.dispose();
+            this.soundtrack = null;
         }
     },
 
@@ -4608,6 +5163,7 @@ const WMCWizard = {
     },
 
     saveAndClose() {
+        this.stopSoundtrack();
         this.close();
         window.location.reload();
     }
