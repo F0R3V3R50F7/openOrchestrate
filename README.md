@@ -1,6 +1,6 @@
 # openOrchestrate
 
-**Local models, treated with respect.**
+**Local AI, treated with respect.**
 
 openOrchestrate is a complete **Local-First MoE AI Front-End** built as a desktop application using **phpDesktop-Chrome** and **llama.cpp**.
 
