@@ -10,16 +10,9 @@
 
 <div align="center">
 
-<<<<<<< HEAD
 ![Powered by](https://img.shields.io/badge/powered_by-PRINCIPLES-blueviolet?style=for-the-badge)
 ![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
 ![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
-=======
-![Visitors](https://img.shields.io/badge/visitors-∞-blue?style=for-the-badge&logo=lighthouse)
-![Status](https://img.shields.io/badge/status-ONLINE-00ff00?style=for-the-badge&logo=statuspage)
-![AI](https://img.shields.io/badge/100%25-LOCAL_AI-ff00ff?style=for-the-badge)
-![No Cloud](https://img.shields.io/badge/☁️_CLOUD-FORBIDDEN-red?style=for-the-badge)
->>>>>>> 1e7c2769b8e6d671c8a52954262ebb1cf894c8ed
 
 **Est. 2024** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
 
@@ -114,17 +107,10 @@ Context limits managed **deliberately**, not silently dropped.
 ### 🔒 **100% LOCAL**
 ```
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-<<<<<<< HEAD
 ┃  ✓ No API calls                  ┃
 ┃  ✓ No telemetry                  ┃
 ┃  ✓ No cloud                      ┃
 ┃  ✓ Stays on YOUR machine         ┃
-=======
-┃  ✓ No API calls                    ┃
-┃  ✓ No telemetry                    ┃
-┃  ✓ No cloud                        ┃
-┃  ✓ Stays on YOUR machine           ┃
->>>>>>> 1e7c2769b8e6d671c8a52954262ebb1cf894c8ed
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
@@ -312,8 +298,4 @@ GOVERNOR   INDEX   PRUNING
 
 _Last Updated: 2026 | Page Views: ∞ | Caffeine Consumed: Yes_
 
-<<<<<<< HEAD
 </div>
-=======
-</div>
->>>>>>> 1e7c2769b8e6d671c8a52954262ebb1cf894c8ed
