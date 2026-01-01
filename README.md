@@ -9,9 +9,7 @@
 ---
 
 <div align="center">
-
-![Visitors](https://img.shields.io/badge/visitors-∞-blue?style=for-the-badge&logo=lighthouse)
-![Status](https://img.shields.io/badge/status-ONLINE-00ff00?style=for-the-badge&logo=statuspage)
+           
 ![AI](https://img.shields.io/badge/100%25-LOCAL_AI-ff00ff?style=for-the-badge)
 ![No Cloud](https://img.shields.io/badge/☁️_CLOUD-FORBIDDEN-red?style=for-the-badge)
 
