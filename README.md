@@ -1,40 +1,301 @@
-# openOrchestrate
+<div align="center">
 
-**Local models, treated with respect**
+# 🎮 openOrchestrate 🎮
 
-openOrchestrate is a complete desktop application built with phpDesktop-Chrome that provides intelligent model routing, context management, and a seamless chat experience for locally-run AI models via llama.cpp.
+### ░░░▒▒▒▓▓▓ LOCAL AI, TREATED WITH RESPECT ▓▓▓▒▒▒░░░
 
-## ✨ Features
+</div>
 
-- **Intelligent Model Routing**: Automatically routes queries to appropriate expert models (text, code, medical, custom)
-- **Velocity Index**: Archives old conversations and intelligently recalls them when relevant
-- **Context Pruning**: Automatically condenses long conversations while preserving key information
-- **Multi-Model Support**: Run multiple GGUF models simultaneously with intelligent GPU allocation
-- **Local Privacy**: All data stays on your machine - no API calls, no cloud dependencies
-- **VRAM Management**: Smart detection and allocation of available GPU memory
-- **File Attachment**: Upload and process text files alongside your conversations
-- **Custom Expert Slots**: Define custom expert models with specific prompts and behaviors
+---
 
-## 🏗️ Architecture
+<div align="center">
 
-### Technology Stack:
+![Powered by](https://img.shields.io/badge/powered_by-PRINCIPLES-blueviolet?style=for-the-badge)
+![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
+![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
 
-- **Frontend**: HTML/CSS/JavaScript (66,063 characters of styles)
-- **Backend**: PHP (40,438 characters of backend code)
-- **Runtime**: phpDesktop-Chrome for simplicity
-- **AI Engine**: llama.cpp for local model inference
-- **Total Codebase**: ~130,000+ characters
+**Est. 2024** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
 
-### Core Components:
+</div>
 
-- **Pipeline Engine**: Multi-stage processing for queries
-- **Llama Governor**: Intelligent model routing and management
-- **Velocity Index**: Long-term memory and context management
+---
 
-### Supported Model Types:
+<table width="100%">
+<tr>
+<td width="50%" valign="top">
 
-- General conversation (Llama 2/3, Mistral, etc.)
-- Code generation (CodeLlama, DeepSeek-Coder)
-- Medical/health queries (Meditron, BioMistral)
-- Custom expert slots with specific prompts
-- Any GGUF format model compatible with llama.cpp
+### 📰 **LATEST HEADLINES**
+
+```
+[BREAKING] Local AI Finally Gets
+           Proper Orchestration!
+           
+[NEW!] Context Windows That Don't
+       Silently Fail You
+       
+[HOT!] VRAM Constraints? We Actually
+       Respect Those Here
+```
+
+</td>
+<td width="50%" valign="top">
+
+### 🎯 **QUICK STATS**
+
+```
+Lines of Code.... 313,000+ chars
+Models Supported. UNLIMITED*
+Cloud Deps....... 0
+Telemetry........ 0
+Working Paths.... SACRED
+```
+<sub>*if llama.cpp supports it</sub>
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🌟 ▂▃▅▇█ WHAT IS THIS █▇▅▃▂ 🌟
+
+**openOrchestrate** is a complete **Local-First MoE AI Front-End** built with phpDesktop-Chrome and llama.cpp.
+
+Not just a chat UI. An **orchestration layer** that:
+- Routes requests intelligently
+- Manages multiple GGUF models
+- Preserves long-term context
+- Degrades gracefully on constrained hardware
+
+Built for people who want local AI that respects **limited VRAM**, **limited context**, and **reality itself**.
+
+---
+
+## 🎪 FEATURES THAT ACTUALLY WORK
+
+### 🧠 **INTELLIGENT MODEL ROUTING**
+```
+╔════════════════════════════════════════╗
+║  Query → Router → Right Model          ║
+║  Code   → CodeLlama                    ║
+║  Medical → Meditron                    ║
+║  General → Llama                       ║
+╚════════════════════════════════════════╝
+```
+
+### 💾 **VELOCITY INDEX** (Long-Term Memory)
+```
+┌─────────────────────────────────────┐
+│ Context full → ARCHIVE & INDEX      │
+│              → Recall when needed   │
+│              → Keep continuity      │
+└─────────────────────────────────────┘
+```
+
+### ✂️ **CONTEXT PRUNING**
+Context limits managed **deliberately**, not silently dropped.
+
+### 🎛️ **MULTI-MODEL EXECUTION**
+```
+╔══════════════════════════════════════╗
+║  GPU: [████████░░] Managed           ║
+║  CPU: [██░░░░░░░░] Auxiliary         ║
+║  VRAM: Predictable ✓                 ║
+╚══════════════════════════════════════╝
+```
+
+### 🔒 **100% LOCAL**
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  ✓ No API calls                  ┃
+┃  ✓ No telemetry                  ┃
+┃  ✓ No cloud                      ┃
+┃  ✓ Stays on YOUR machine         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### 📎 **FILE ATTACHMENTS**
+Attach text files for analysis. Fully local.
+
+---
+
+## 🏗️ ARCHITECTURE
+
+<div align="center">
+
+```
+        USER INTERFACE
+        (HTML/CSS/JS)
+              │
+              ▼
+       PIPELINE ENGINE
+              │
+     ┌────────┼────────┐
+     ▼        ▼        ▼
+  LLAMA   VELOCITY  CONTEXT
+GOVERNOR   INDEX   PRUNING
+     │
+     ▼
+  llama.cpp
+```
+
+</div>
+
+### 🎯 **TECH STACK**
+
+| Component | Tech |
+|-----------|------|
+| Frontend | HTML/CSS/JS (~66k chars) |
+| Backend | PHP (~40k chars) |
+| Runtime | phpDesktop-Chrome |
+| Inference | llama.cpp |
+
+**Total:** 313,000+ characters of disciplined code.
+
+---
+
+## 🎭 SUPPORTED MODELS
+
+```
+╔═══════════════════════════════════════════════════╗
+║  IF llama.cpp CAN RUN IT, WE CAN ORCHESTRATE IT  ║
+╚═══════════════════════════════════════════════════╝
+```
+
+<table width="100%">
+<tr>
+<td valign="top" width="50%">
+
+**🗣️ GENERAL LLMs**
+- Llama 2/3
+- Mistral
+- Qwen
+- Gemma
+- Your custom GGUF
+
+</td>
+<td valign="top" width="50%">
+
+**💻 CODE MODELS**
+- CodeLlama
+- DeepSeek-Coder
+- StarCoder
+- WizardCoder
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🏥 MEDICAL/RESEARCH**
+- Meditron
+- BioMistral
+- Clinical models
+
+</td>
+<td valign="top">
+
+**🎯 ANY GGUF**
+- If llama.cpp runs it
+- We orchestrate it
+- No vendor lock-in
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🎲 DESIGN PHILOSOPHY
+
+<div align="center">
+
+```
+╔═══════════════════════════════════════════════════════╗
+║  ⚡ Constraints are real                             ║
+║  ⚡ Regression is failure                            ║
+║  ⚡ Working paths are sacred                         ║
+║  ⚡ Graceful degradation > Silent failure            ║
+╚═══════════════════════════════════════════════════════╝
+```
+
+</div>
+
+---
+
+## 📊 STATUS
+
+<div align="center">
+
+### 🚧 **UNDER ACTIVE DEVELOPMENT** 🚧
+
+**Focus:** Stability > Features | **Approach:** Conservative releases
+
+</div>
+
+---
+
+## 🎯 WHY THIS EXISTS
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center">💾<br><b>Limited VRAM</b></td>
+<td align="center">📝<br><b>Limited Context</b></td>
+<td align="center">🤝<br><b>User Trust</b></td>
+<td align="center">🌍<br><b>Reality</b></td>
+</tr>
+</table>
+
+**Local AI deserves tooling that respects constraints.**
+
+</div>
+
+---
+
+<div align="center">
+
+## 🏴󠁧󠁢󠁷󠁬󠁳󠁿 MADE IN WALES
+
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/320px-Flag_of_Wales.svg.png" alt="Welsh Flag" width="200">
+
+### _Crafted with love, discipline, and entirely too much tea._
+
+</div>
+
+---
+
+<div align="center">
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                  ┃
+┃  "Finally, a local AI tool that doesn't         ┃
+┃   treat me like I have a datacenter"            ┃
+┃                                   — Hopefully You┃
+┃                                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+
+### 💬 Got Questions? Found Bugs? Have Opinions?
+
+**Issues are welcome. PRs are reviewed. Respect is expected.**
+
+</div>
+
+---
+
+<div align="center">
+
+![Powered by](https://img.shields.io/badge/powered_by-PRINCIPLES-blueviolet?style=for-the-badge)
+![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
+![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
+
+**[⬆️ BACK TO TOP](#)**
+
+---
+
+_Last Updated: 2026 | Page Views: ∞ | Caffeine Consumed: Yes_
+
+</div>
