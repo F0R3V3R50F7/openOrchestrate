@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎮 openOrchestrate 🎮
+# 💬 openOrchestrate 💬
 
 ### ░░░▒▒▒▓▓▓ LOCAL AI, TREATED WITH RESPECT ▓▓▓▒▒▒░░░
 
@@ -10,8 +10,9 @@
 
 <div align="center">
            
-![AI](https://img.shields.io/badge/100%25-LOCAL_AI-ff00ff?style=for-the-badge)
-![No Cloud](https://img.shields.io/badge/☁️_CLOUD-FORBIDDEN-red?style=for-the-badge)
+![Powered by](https://img.shields.io/badge/powered_by-PRINCIPLES-blueviolet?style=for-the-badge)
+![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
+![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
 
 **Est. 2024** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
 
