@@ -134,7 +134,7 @@ Context limits managed **deliberately**, not silently dropped.
 ```
 
 ### 📎 **FILE ATTACHMENTS**
-Attach text files for analysis. Fully local.
+Attach text files for analysis.
 
 ---
 
