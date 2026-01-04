@@ -20,6 +20,25 @@
 
 ---
 
+## 📸 SCREENSHOTS
+
+<div align="center">
+<table>
+<tr>
+<td align="center">
+<img src="/images/scrnsht1.png" alt="First Time Setup Wizard" width="100%">
+<sub>Main Interface - Intelligent Model Routing</sub>
+</td>
+<td align="center">
+<img src="/images/shrnsht2.png" alt="Chat Interface" width="100%">
+<sub>Multi-Model Management & Context Control</sub>
+</td>
+</tr>
+</table>
+</div>
+
+---
+
 <table width="100%">
 <tr>
 <td width="50%" valign="top">
@@ -254,7 +273,7 @@ GOVERNOR   INDEX   PRUNING
 
 <div align="center">
 
-## 🏴󠁧󠁢󠁷󠁬󠁳󠁿 MADE IN WALES
+## 🏴 MADE IN WALES
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/320px-Flag_of_Wales.svg.png" alt="Welsh Flag" width="200">
 
