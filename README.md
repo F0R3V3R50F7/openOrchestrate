@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎮 openOrchestrate 🎮
+# ❤️ openOrchestrate 🗪
 
 ### ░░░▒▒▒▓▓▓ LOCAL AI, TREATED WITH RESPECT ▓▓▓▒▒▒░░░
 
