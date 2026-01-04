@@ -14,7 +14,7 @@
 ![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
 ![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
 
-**Est. 2024** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
+**Est. 2025** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
 
 </div>
 
