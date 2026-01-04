@@ -1,20 +1,51 @@
 <?php
 /* openOrchestrate - Llama.cpp Frontend   *
  * MPL-2.0 https://mozilla.org/MPL/2.0/   *
- * @version 0.9-R7 (Pre-Release)          *
+ * @version 0.9-R8 (Pre-Release)          *
  * © TechnologystLabs - 2026              */
 
 /* ===== CORE UTILITIES ===== */
 define('DEFAULT_CONFIG', [
-    'text_model' => '', 'code_model' => '', 'medical_model' => '', 'aux_model' => '',
-    'text_enabled' => true, 'code_enabled' => true, 'medical_enabled' => true,
-    'aux_cpu_only' => true, 'aux_context_length' => 2048, 'aux_port' => 8081, 'expert_port' => 8080,
-    'velocity_enabled' => true, 'velocity_threshold' => 40, 'velocity_char_threshold' => 1500,
+    // Expert slots
+    'expert_1_model' => '', 'expert_1_name' => 'Text', 'expert_1_enabled' => true, 'expert_1_system_prompt' => 'You are an expert in writing, editing, summarising, and analysing text with a focus on clarity and precision.',
+    'expert_2_model' => '', 'expert_2_name' => 'Code', 'expert_2_enabled' => false, 'expert_2_system_prompt' => 'You are a senior software engineer specialising in correct, efficient, and maintainable code.',
+    'expert_3_model' => '', 'expert_3_name' => 'Medical', 'expert_3_enabled' => false, 'expert_3_system_prompt' => 'You are a medical expert explaining human biology, diseases, diagnostics, and treatments using established knowledge.',
+    'expert_4_model' => '', 'expert_4_name' => 'Electrical', 'expert_4_enabled' => false, 'expert_4_system_prompt' => 'You are an expert electrician specialising in residential, commercial, and industrial electrical systems.',
+    'expert_5_model' => '', 'expert_5_name' => 'Vehicle', 'expert_5_enabled' => false, 'expert_5_system_prompt' => 'You are an expert vehicle mechanic specialising in automotive systems and fault diagnosis.',
+    'expert_6_model' => '', 'expert_6_name' => 'Law', 'expert_6_enabled' => false, 'expert_6_system_prompt' => 'You are a legal expert specialising in clear explanation of laws, legal concepts, and procedures.',
+    'expert_7_model' => '', 'expert_7_name' => 'Expert 7', 'expert_7_enabled' => false, 'expert_7_system_prompt' => 'You are a helpful assistant. Provide detailed, accurate responses.',
+    'expert_8_model' => '', 'expert_8_name' => 'Expert 8', 'expert_8_enabled' => false, 'expert_8_system_prompt' => 'You are a helpful assistant. Provide detailed, accurate responses.',
+    'expert_9_model' => '', 'expert_9_name' => 'Expert 9', 'expert_9_enabled' => false, 'expert_9_system_prompt' => 'You are a helpful assistant. Provide detailed, accurate responses.',
+    'expert_10_model' => '', 'expert_10_name' => 'Expert 10', 'expert_10_enabled' => false, 'expert_10_system_prompt' => 'You are a helpful assistant. Provide detailed, accurate responses.',
+    // Auxiliary model
+    'aux_model' => '',
+    'aux_cpu_only' => true, 'aux_context_length' => 4096, 'aux_port' => 8081, 'expert_port' => 8080,
+    'velocity_enabled' => true, 'velocity_threshold' => 45, 'velocity_char_threshold' => 1500,
     'velocity_index_prompt' => 'Create a brief, descriptive title (max 10 words) that captures the key topic or intent of this message. Return ONLY the title, nothing else.',
     'velocity_recall_prompt' => 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL',
     'enable_pruning' => true, 'prune_threshold' => 1500,
     'prune_prompt' => 'Condense this message to only the essential information in 2-3 sentences:'
 ]);
+
+// ===== LOGGING HELPER =====
+function write_debug_log($type, $message, $data = null) {
+    global $governorDir;
+    
+    // Route PRUNE_* logs to pruning.log, everything else to debug_switching.log
+    if (strpos($type, 'PRUNE_') === 0) {
+        $logFile = "$governorDir/pruning.log";
+    } else {
+        $logFile = "$governorDir/debug_switching.log";
+    }
+    
+    $timestamp = date('Y-m-d H:i:s');
+    $logEntry = "[$timestamp] [$type] $message";
+    if ($data !== null) {
+        $logEntry .= "\n" . json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    }
+    $logEntry .= "\n" . str_repeat('-', 80) . "\n";
+    file_put_contents($logFile, $logEntry, FILE_APPEND);
+}
 
 function mm_to_utf8($v) {
     if (is_array($v)) return array_map('mm_to_utf8', $v);
@@ -95,6 +126,307 @@ function load_config() {
 
 function load_governor_config() { return load_config(); }
 
+/* ===== MODEL ARCHITECTURE SNIFFING ===== */
+function sniff_model_architecture($logFile) {
+    if (!file_exists($logFile)) {
+        return null;
+    }
+    
+    $logContents = file_get_contents($logFile);
+    if (empty($logContents)) {
+        return null;
+    }
+    
+    $arch = [
+        'n_layer' => null,
+        'n_embd' => null,
+        'n_head' => null,
+        'n_head_kv' => null,
+        'n_ctx_train' => null,
+        'n_swa' => null,
+        'architecture' => null
+    ];
+    
+    // Detect architecture type (gemma2, gemma3, llama, etc.)
+    if (preg_match('/general\.architecture\s+str\s+=\s+(\w+)/', $logContents, $matches)) {
+        $arch['architecture'] = $matches[1];
+    }
+    
+    // Get the prefix based on architecture
+    $prefix = $arch['architecture'] ?? 'llama';
+    
+    // Extract layer count (block_count)
+    $patterns = [
+        "/{$prefix}\.block_count\s+u32\s+=\s+(\d+)/",
+        "/n_layer\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_layer'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    // Extract embedding dimension
+    $patterns = [
+        "/{$prefix}\.embedding_length\s+u32\s+=\s+(\d+)/",
+        "/n_embd\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_embd'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    // Extract head counts for GQA calculation
+    $patterns = [
+        "/{$prefix}\.attention\.head_count\s+u32\s+=\s+(\d+)/",
+        "/n_head\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_head'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    $patterns = [
+        "/{$prefix}\.attention\.head_count_kv\s+u32\s+=\s+(\d+)/",
+        "/n_head_kv\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_head_kv'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    // Extract training context length
+    $patterns = [
+        "/{$prefix}\.context_length\s+u32\s+=\s+(\d+)/",
+        "/n_ctx_train\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_ctx_train'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    // Extract sliding window size (if present)
+    $patterns = [
+        "/{$prefix}\.attention\.sliding_window\s+u32\s+=\s+(\d+)/",
+        "/n_swa\s+=\s+(\d+)/"
+    ];
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $logContents, $matches)) {
+            $arch['n_swa'] = (int)$matches[1];
+            break;
+        }
+    }
+    
+    // Calculate GQA ratio
+    if ($arch['n_head'] && $arch['n_head_kv']) {
+        $arch['gqa_ratio'] = $arch['n_head'] / $arch['n_head_kv'];
+    }
+    
+    // Only return if we got the critical values
+    if ($arch['n_layer'] && $arch['n_embd'] && $arch['n_head'] && $arch['n_head_kv']) {
+        return $arch;
+    }
+    
+    return null;
+}
+
+function calculate_precise_context($arch, $vramTotalMB, $modelSizeMB) {
+    if (!$arch || !$arch['n_layer'] || !$arch['n_embd']) {
+        return null;
+    }
+    
+    $vramUsableMB = $vramTotalMB * 0.85; // 15% headroom
+    $vramAfterModelMB = $vramUsableMB - $modelSizeMB;
+    
+    if ($vramAfterModelMB < 100) {
+        return 512; // Minimum
+    }
+    
+    // Precise KV cache calculation using real architecture
+    $n_parallel = 4; // llama-server default
+    $n_layer = $arch['n_layer'];
+    $n_embd = $arch['n_embd'];
+    $gqa_ratio = $arch['gqa_ratio'] ?? 1.0;
+    
+    // KV cache: 2 (K+V) * layers * embedding_dim * 2 bytes (FP16)
+    // Divided by GQA ratio for memory reduction
+    $bytesPerTokenBase = 2 * $n_layer * $n_embd * 2;
+    $bytesPerToken = $bytesPerTokenBase / $gqa_ratio;
+    $bytesPerContextToken = $bytesPerToken * $n_parallel;
+    
+    $vramForKvCacheMB = $vramAfterModelMB * 0.9; // 10% overhead reserve
+    $vramForKvCacheBytes = $vramForKvCacheMB * 1024 * 1024;
+    
+    $maxContext = floor($vramForKvCacheBytes / $bytesPerContextToken);
+    
+    // Sliding window models use DUAL KV caches (non-SWA + SWA)
+    // This doubles memory usage - reduce by 50%
+    if (isset($arch['n_swa']) && $arch['n_swa'] > 0) {
+        $maxContext = floor($maxContext * 0.5);
+    }
+    
+    // Respect model's training context limit
+    if ($arch['n_ctx_train']) {
+        $maxContext = min($maxContext, $arch['n_ctx_train']);
+    }
+    
+    // Clamp to reasonable bounds
+    $maxContext = max(512, min(131072, $maxContext));
+    
+    // Align to 256
+    $maxContext = floor($maxContext / 256) * 256;
+    
+    return $maxContext;
+}
+
+/* ===== CONTEXT CALIBRATION SYSTEM ===== */
+function load_context_cache() {
+    global $governorDir;
+    $cacheFile = "$governorDir/context_cache.json";
+    
+    if (!file_exists($cacheFile)) {
+        return [];
+    }
+    
+    $data = json_decode(file_get_contents($cacheFile), true);
+    return $data ?: [];
+}
+
+function save_context_cache($cache) {
+    global $governorDir;
+    $cacheFile = "$governorDir/context_cache.json";
+    file_put_contents($cacheFile, json_encode($cache, JSON_PRETTY_PRINT));
+}
+
+function calibrate_model_context($model, $vramInfo) {
+    global $modelsDir, $governorDir;
+    
+    @set_time_limit(300);
+    
+    $modelPath = realpath("$modelsDir/$model");
+    if (!$modelPath || !file_exists($modelPath)) {
+        return ['success' => false, 'error' => 'Model not found'];
+    }
+    
+    $modelSizeMB = filesize($modelPath) / (1024 * 1024);
+    $vramTotalMB = $vramInfo['total'] ?? 0;
+    
+    if (!$vramTotalMB || $vramTotalMB <= 0) {
+        return ['success' => false, 'error' => 'VRAM info not available'];
+    }
+    
+    $port = 8080;
+    $conservativeContext = 2048;
+    
+    // Step 1: Start with conservative context to sniff architecture
+    stop_llama_server('expert');
+    sleep(2);
+    
+    $result = start_llama_server('expert', $model, $port, false, $conservativeContext);
+    
+    if (!$result['success']) {
+        return ['success' => false, 'error' => 'Failed to start server for calibration'];
+    }
+    
+    sleep(5);
+    
+    // Step 2: Sniff architecture from log
+    $logFile = "$governorDir/expert_server.log";
+    $arch = sniff_model_architecture($logFile);
+    
+    if (!$arch) {
+        stop_llama_server('expert');
+        return [
+            'success' => true,
+            'max_context' => $conservativeContext,
+            'method' => 'conservative_fallback'
+        ];
+    }
+    
+    // Step 3: Calculate theoretical maximum
+    $theoreticalMax = calculate_precise_context($arch, $vramTotalMB, $modelSizeMB);
+    
+    if (!$theoreticalMax) {
+        stop_llama_server('expert');
+        return [
+            'success' => true,
+            'max_context' => $conservativeContext,
+            'method' => 'architecture_incomplete',
+            'architecture' => $arch
+        ];
+    }
+    
+    // Step 4: Binary search for actual maximum
+    $minContext = $conservativeContext;
+    $maxSearchContext = $arch['n_ctx_train'] ?? 131072;
+    if ($theoreticalMax && $theoreticalMax > 0) {
+        $maxSearchContext = min($theoreticalMax * 10, $maxSearchContext);
+    }
+    $maxContext = $maxSearchContext;
+    $attempts = 0;
+    $maxAttempts = 5;
+    $lastWorking = $conservativeContext;
+    
+    while ($attempts < $maxAttempts && $maxContext - $minContext > 512) {
+        $attempts++;
+        
+        if ($attempts == 1) {
+            $testContext = min($conservativeContext * 10, $maxContext);
+        } else {
+            $testContext = floor(($minContext + $maxContext) / 2);
+            $testContext = floor($testContext / 256) * 256;
+        }
+        
+        stop_llama_server('expert');
+        sleep(2);
+        
+        $result = start_llama_server('expert', $model, $port, false, $testContext);
+        
+        if (!$result['success']) {
+            $maxContext = $testContext - 256;
+            continue;
+        }
+        
+        // Wait and check if healthy
+        $healthy = false;
+        for ($i = 0; $i < 15; $i++) {
+            sleep(1);
+            $health = check_server_health($port);
+            if ($health['healthy']) {
+                $healthy = true;
+                break;
+            }
+        }
+        
+        if ($healthy) {
+            $lastWorking = $testContext;
+            $minContext = $testContext + 256;
+        } else {
+            $maxContext = $testContext - 256;
+        }
+    }
+    
+    stop_llama_server('expert');
+    
+    return [
+        'success' => true,
+        'max_context' => $lastWorking,
+        'architecture' => $arch,
+        'theoretical_max' => $theoreticalMax,
+        'attempts' => $attempts,
+        'method' => 'binary_search'
+    ];
+}
+
 /* ===== AUX MODEL CLIENT ===== */
 function aux_chat_request($prompt, $options = []) {
     @set_time_limit(300);
@@ -107,6 +439,15 @@ function aux_chat_request($prompt, $options = []) {
     $govConfig = load_governor_config();
     $auxPort = $govConfig['aux_port'] ?? 8081;
     
+    // LOG: Request initiated
+    write_debug_log('PRUNE_REQUEST', 'Aux chat request initiated', [
+        'prompt_length' => strlen($prompt),
+        'prompt_preview' => substr($prompt, 0, 200) . (strlen($prompt) > 200 ? '...' : ''),
+        'max_tokens' => $maxTokens,
+        'temperature' => $temperature,
+        'aux_port' => $auxPort
+    ]);
+    
     $postBody = [
         'messages' => [['role' => 'user', 'content' => $prompt]],
         'max_tokens' => $maxTokens,
@@ -116,8 +457,17 @@ function aux_chat_request($prompt, $options = []) {
     
     $jsonBody = json_encode($postBody);
     if ($jsonBody === false) {
+        write_debug_log('PRUNE_ERROR', 'JSON encode failed', [
+            'error' => json_last_error_msg()
+        ]);
         return ['success' => false, 'error' => 'JSON encode failed: ' . json_last_error_msg()];
     }
+    
+    // LOG: JSON payload prepared
+    write_debug_log('PRUNE_REQUEST', 'JSON payload prepared', [
+        'json_length' => strlen($jsonBody),
+        'payload_preview' => substr($jsonBody, 0, 300) . (strlen($jsonBody) > 300 ? '...' : '')
+    ]);
     
     $ch = curl_init();
     curl_setopt_array($ch, [
@@ -175,15 +525,40 @@ function aux_chat_request($prompt, $options = []) {
     curl_multi_close($mh);
     curl_close($ch);
     
+    // LOG: Response received
+    write_debug_log('PRUNE_RESPONSE', 'Curl request completed', [
+        'http_code' => $httpCode,
+        'curl_error' => $error ?: 'none',
+        'response_length' => $result !== false ? strlen($result) : 0,
+        'response_preview' => $result !== false ? substr($result, 0, 500) . (strlen($result) > 500 ? '...' : '') : 'false'
+    ]);
+    
     if ($httpCode === 200 && $result !== false) {
         $response = json_decode($result, true);
         $content = trim($response['choices'][0]['message']['content'] ?? '');
         
+        // LOG: Successful response parsed
+        write_debug_log('PRUNE_SUCCESS', 'Response parsed successfully', [
+            'content_length' => strlen($content),
+            'content_preview' => substr($content, 0, 200) . (strlen($content) > 200 ? '...' : ''),
+            'full_response_structure' => array_keys($response)
+        ]);
+        
         if (!empty($content)) {
             return ['success' => true, 'output' => $content];
         }
+        
+        write_debug_log('PRUNE_ERROR', 'Empty response from model', [
+            'response_structure' => $response
+        ]);
         return ['success' => false, 'error' => 'Empty response from model'];
     }
+    
+    write_debug_log('PRUNE_ERROR', 'Request failed', [
+        'http_code' => $httpCode,
+        'error' => $error ?: "HTTP $httpCode",
+        'response' => $result
+    ]);
     
     return ['success' => false, 'error' => $error ?: "HTTP $httpCode"];
 }
@@ -240,15 +615,35 @@ function check_server_health($port) {
 function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
     global $modelsDir, $governorDir;
     
+    // FLUSH OLD LOG FILE BEFORE STARTING - critical for accurate metadata sniffing
+    $logFile = __DIR__ . "/governor/{$type}_server.log";
+    if (file_exists($logFile)) {
+        @unlink($logFile);
+        write_debug_log('INFO', "Flushed old server log", ['path' => $logFile]);
+    }
+    
+    write_debug_log('START_SERVER', "Starting $type server", [
+        'model' => $model,
+        'port' => $port,
+        'cpu_only' => $cpuOnly,
+        'context_size' => $contextSize
+    ]);
+    
     $modelPath = realpath("$modelsDir/$model");
     if (!$modelPath) {
+        write_debug_log('ERROR', "Model not found: $model");
         return ['success' => false, 'error' => "Model not found: $model"];
     }
     
+    write_debug_log('INFO', "Model path resolved", ['path' => $modelPath]);
+    
     $llamaServer = __DIR__ . '/llama-server.exe';
     if (!file_exists($llamaServer)) {
+        write_debug_log('ERROR', "llama-server.exe not found at " . $llamaServer);
         return ['success' => false, 'error' => 'llama-server.exe not found'];
     }
+    
+    write_debug_log('INFO', "llama-server.exe found", ['path' => $llamaServer]);
     
     $ctx = $contextSize > 0 ? $contextSize : ($type === 'aux' ? 2048 : 4096);
     $ngl = $cpuOnly ? 0 : 99;
@@ -263,9 +658,16 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
         "-t" => $threads
     ];
     
+    // For CPU-only servers, prevent GPU KV cache to avoid conflicts
+    if ($cpuOnly) {
+        $args['--split-mode'] = "none";
+    }
+    
     if ($type === 'aux' && !$cpuOnly) {
         $args['--split'] = "30:70";
     }
+    
+    write_debug_log('INFO', "Server arguments prepared", $args);
     
     $logFile = __DIR__ . "/governor/{$type}_server.log";
     
@@ -274,13 +676,16 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
         $command .= " $k $v";
     }
     
+    write_debug_log('INFO', "Command to execute", ['command' => $command]);
+    
     $batchFile = __DIR__ . "/governor/start_{$type}.bat";
     $batchFileWin = str_replace('/', '\\', $batchFile);
     $pidFile = __DIR__ . "/governor/{$type}_watchdog.pid";
     $pidFileWin = str_replace('/', '\\', $pidFile);
     
+    $logFileWin = str_replace('/', '\\', $logFile);
     $watchdogBat = "@echo off\r\nsetlocal enabledelayedexpansion\r\n";
-    $watchdogBat .= "start \"llama-{$type}\" /B $command\r\n";
+    $watchdogBat .= "start \"llama-{$type}\" /B $command >> \"$logFileWin\" 2>&1\r\n";
     $watchdogBat .= "timeout /t 3 /nobreak >nul\r\n";
     $watchdogBat .= "set LLAMA_PID=\r\n";
     $watchdogBat .= "for /f \"tokens=5\" %%a in ('netstat -ano ^| find \":$port \" ^| find \"LISTENING\"') do (\r\n";
@@ -306,13 +711,41 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
     $vbsFile = __DIR__ . "/governor/launch_{$type}.vbs";
     file_put_contents($vbsFile, 'CreateObject("WScript.Shell").Run "' . $batchFileWin . '", 0, False');
     
+    write_debug_log('INFO', "VBS launcher created, executing", ['vbs_file' => $vbsFile]);
+    
     exec("wscript \"$vbsFile\"");
     
+    write_debug_log('INFO', "Process launched via wscript, waiting 2 seconds");
+    
     sleep(2);
+    
+    // Check multiple possible log file locations
+    $logPaths = [
+        $logFile,
+        __DIR__ . "/governor/{$type}_server.log",
+        __DIR__ . "/{$type}_server.log"
+    ];
+    
+    $logFound = false;
+    foreach ($logPaths as $possibleLog) {
+        if (file_exists($possibleLog)) {
+            $logContents = file_get_contents($possibleLog);
+            write_debug_log('SERVER_LOG', "Initial server output from $possibleLog", ['log' => substr($logContents, 0, 2000)]);
+            $logFound = true;
+            break;
+        }
+    }
+    
+    if (!$logFound) {
+        write_debug_log('WARNING', "Server log file not found in any location", ['checked_paths' => $logPaths]);
+    }
+    
     $pid = 0;
     
     $output = [];
     exec('tasklist /FI "IMAGENAME eq llama-server.exe" /FO CSV 2>&1', $output);
+    
+    write_debug_log('INFO', "Process search output", $output);
     
     foreach ($output as $line) {
         if (preg_match('/"llama-server\.exe","(\d+)"/', $line, $matches)) {
@@ -321,25 +754,62 @@ function start_llama_server($type, $model, $port, $cpuOnly, $contextSize = 0) {
             exec("wmic process where \"ProcessId=$foundPid\" get CommandLine 2>&1", $cmdOutput);
             $cmdLine = implode(' ', $cmdOutput);
             
+            write_debug_log('INFO', "Found llama-server process", [
+                'pid' => $foundPid,
+                'command_line' => $cmdLine
+            ]);
+            
             if (strpos($cmdLine, "--port $port") !== false) {
                 $pid = $foundPid;
                 file_put_contents("$governorDir/{$type}.pid", $pid);
+                write_debug_log('SUCCESS', "Matched server on correct port", ['pid' => $pid, 'port' => $port]);
                 break;
+            } else {
+                write_debug_log('INFO', "Process on different port, continuing search");
             }
         }
     }
     
-    return [
+    // Wait a bit more and check server log again
+    sleep(3);
+    
+    // Try to read the server log from the standard location
+    $serverLogPath = __DIR__ . "/governor/{$type}_server.log";
+    if (file_exists($serverLogPath)) {
+        $logContents = file_get_contents($serverLogPath);
+        write_debug_log('SERVER_LOG', "Full server output after 5 seconds", ['log' => $logContents]);
+    } else {
+        write_debug_log('WARNING', "Server log still not found", ['path' => $serverLogPath]);
+        // Try to check what files ARE in the governor directory
+        $govFiles = glob(__DIR__ . "/governor/*.log");
+        write_debug_log('INFO', "Available log files in governor directory", ['files' => $govFiles]);
+    }
+    
+    // Check if port is actually open
+    $portOpen = is_port_open($port);
+    write_debug_log('PORT_CHECK', "Port status", ['port' => $port, 'open' => $portOpen]);
+    
+    // Check server health
+    $health = check_server_health($port);
+    write_debug_log('HEALTH_CHECK', "Server health", $health);
+    
+    $result = [
         'success' => true,
         'port' => $port,
         'type' => $type,
         'model' => $model,
         'pid' => $pid
     ];
+    
+    write_debug_log('START_COMPLETE', "Server start sequence completed", $result);
+    
+    return $result;
 }
 
 function stop_llama_server($type) {
     global $governorDir;
+    
+    write_debug_log('STOP_SERVER', "Stopping server", ['type' => $type]);
     
     $stopped = [];
     $allSuccess = true;
@@ -372,6 +842,11 @@ function stop_llama_server($type) {
         $output = [];
         $returnCode = 0;
         exec("taskkill /F /PID $expertPid 2>&1", $output, $returnCode);
+        write_debug_log('INFO', "Expert server kill attempt", [
+            'pid' => $expertPid,
+            'return_code' => $returnCode,
+            'output' => $output
+        ]);
         if ($returnCode === 0) {
             @unlink($expertPidFile);
             $stopped[] = ['type' => 'expert', 'pid' => $expertPid];
@@ -531,7 +1006,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = $data['message'] ?? '';
                 $prompt = $data['prompt'] ?? '';
                 
+                // LOG: Prune request received
+                write_debug_log('PRUNE_ENDPOINT', 'Prune message request received', [
+                    'message_length' => strlen($message),
+                    'message_preview' => substr($message, 0, 200) . (strlen($message) > 200 ? '...' : ''),
+                    'prompt_provided' => !empty($prompt),
+                    'prompt_length' => strlen($prompt)
+                ]);
+                
                 if (!is_string($message) || !trim($message)) {
+                    write_debug_log('PRUNE_ERROR', 'No message provided', [
+                        'message_type' => gettype($message),
+                        'message_value' => $message
+                    ]);
                     $response = error_response('No message provided');
                     break;
                 }
@@ -539,19 +1026,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = trim($message);
                 $prompt = trim($prompt) ?: DEFAULT_CONFIG['prune_prompt'];
                 
+                write_debug_log('PRUNE_ENDPOINT', 'Processing prune request', [
+                    'trimmed_message_length' => strlen($message),
+                    'using_prompt' => $prompt,
+                    'prompt_is_default' => $prompt === DEFAULT_CONFIG['prune_prompt']
+                ]);
+                
                 $govConfig = load_governor_config();
                 $auxPort = $govConfig['aux_port'] ?? 8081;
                 
+                write_debug_log('PRUNE_ENDPOINT', 'Checking aux model availability', [
+                    'aux_port' => $auxPort,
+                    'checking_port' => true
+                ]);
+                
                 if (!is_port_open($auxPort)) {
+                    write_debug_log('PRUNE_ERROR', 'Auxiliary model not running', [
+                        'aux_port' => $auxPort,
+                        'port_open' => false
+                    ]);
                     $response = error_response('Auxiliary model not running');
                     break;
                 }
                 
+                write_debug_log('PRUNE_ENDPOINT', 'Sending to aux_chat_request', [
+                    'aux_port' => $auxPort,
+                    'combined_prompt_length' => strlen("$prompt\n\n$message")
+                ]);
+                
                 $result = aux_chat_request("$prompt\n\n$message", ['temperature' => 0.3]);
                 
+                write_debug_log('PRUNE_ENDPOINT', 'Received response from aux_chat_request', [
+                    'success' => $result['success'],
+                    'has_output' => isset($result['output']),
+                    'output_length' => isset($result['output']) ? strlen($result['output']) : 0,
+                    'error' => $result['error'] ?? 'none'
+                ]);
+                
                 if ($result['success']) {
+                    write_debug_log('PRUNE_SUCCESS', 'Prune completed successfully', [
+                        'original_length' => strlen($message),
+                        'pruned_length' => strlen($result['output']),
+                        'compression_ratio' => round((1 - strlen($result['output']) / strlen($message)) * 100, 2) . '%'
+                    ]);
                     $response = ['success' => true, 'pruned' => $result['output']];
                 } else {
+                    write_debug_log('PRUNE_ERROR', 'Prune failed', [
+                        'error' => $result['error'] ?? 'Unknown',
+                        'full_result' => $result
+                    ]);
                     $response = error_response('Prune failed: ' . ($result['error'] ?? 'Unknown'));
                 }
                 break;
@@ -563,6 +1086,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
                 
+                $message = substr($message, 0, 500);
                 $govConfig = load_governor_config();
                 
                 if (!is_port_open($govConfig['aux_port'] ?? 8081)) {
@@ -570,52 +1094,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
                 
-                $textEnabled = ($govConfig['text_enabled'] ?? true) && !empty($govConfig['text_model']);
-                $codeEnabled = ($govConfig['code_enabled'] ?? true) && !empty($govConfig['code_model']);
-                $medicalEnabled = ($govConfig['medical_enabled'] ?? true) && !empty($govConfig['medical_model']);
+                // Get expert names from client request or build from config
+                $expertNames = $data['expert_names'] ?? [];
                 
-                $enabledCategories = [];
-                $categoryDescriptions = [];
-                
-                if ($codeEnabled) {
-                    $enabledCategories[] = 'CODE';
-                    $categoryDescriptions[] = "CODE means: programming code, scripts, functions, debugging, error messages with stack traces, technical implementation, code review, SQL queries, HTML/CSS/JavaScript, API requests, command line instructions, or requests to write/fix/explain code.";
-                }
-                
-                if ($medicalEnabled) {
-                    $enabledCategories[] = 'MEDICAL';
-                    $categoryDescriptions[] = "MEDICAL means: health questions, medical symptoms, diagnoses, treatments, medications, medical advice, anatomy, physiology, disease information, healthcare, medical terminology, or requests for medical information.";
-                }
-                
-                if ($textEnabled) {
-                    $enabledCategories[] = 'TEXT';
-                    $textDesc = "TEXT means: general conversation, questions about concepts, creative writing, explanations, advice";
-                    if ($codeEnabled || $medicalEnabled) {
-                        $excluded = [];
-                        if ($codeEnabled) $excluded[] = "programming code";
-                        if ($medicalEnabled) $excluded[] = "medical topics";
-                        $textDesc .= ", or anything not directly involving " . implode(' or ', $excluded);
+                // If no expert names passed, build from config
+                if (empty($expertNames)) {
+                    for ($i = 1; $i <= 10; $i++) {
+                        $enabled = $govConfig["expert_{$i}_enabled"] ?? ($i <= 5);
+                        $model = $govConfig["expert_{$i}_model"] ?? '';
+                        $name = $govConfig["expert_{$i}_name"] ?? "Expert $i";
+                        
+                        if ($enabled && !empty($model)) {
+                            $expertNames[] = strtoupper($name);
+                        }
                     }
-                    $textDesc .= ".";
-                    $categoryDescriptions[] = $textDesc;
                 }
                 
-                if (count($enabledCategories) <= 1) {
+                // If only one expert or no experts, return immediately
+                if (count($expertNames) <= 1) {
                     $response = [
                         'success' => true,
-                        'route' => $enabledCategories[0] ?? 'TEXT',
+                        'route' => $expertNames[0] ?? 'EXPERT_1',
                         'single_expert' => true,
                         'message_preview' => substr($message, 0, 100)
                     ];
                     break;
                 }
                 
-                $categoriesList = implode(', ', $enabledCategories);
-                $descriptionsText = implode("\n\n", $categoryDescriptions);
+                // Build routing prompt with expert names
+                $categoriesList = implode(', ', $expertNames);
                 
-                $routingPrompt = "Task: Classify the following message as one of: $categoriesList.
+                $routingPrompt = "Task: Classify the following message as one of these categories: $categoriesList.
 
-$descriptionsText
+Analyze the message content and determine which category best matches. Consider the topic, keywords, and intent of the message.
 
 Message to classify:
 ---
@@ -624,22 +1135,25 @@ $message
 
 Respond with exactly one word - one of: $categoriesList:";
                 
-                $result = aux_chat_request($routingPrompt, ['max_tokens' => 10, 'temperature' => 0.1]);
+                $result = aux_chat_request($routingPrompt, ['max_tokens' => 20, 'temperature' => 0.1]);
                 
                 if ($result['success']) {
                     $rawResponse = trim($result['output']);
                     $upperResponse = strtoupper($rawResponse);
                     $classification = null;
                     
-                    if ($codeEnabled && strpos($upperResponse, 'CODE') !== false) {
-                        $classification = 'CODE';
-                    } elseif ($medicalEnabled && strpos($upperResponse, 'MEDICAL') !== false) {
-                        $classification = 'MEDICAL';
-                    } elseif ($textEnabled && strpos($upperResponse, 'TEXT') !== false) {
-                        $classification = 'TEXT';
-                    } else {
-                        $firstWord = strtoupper(preg_replace('/[^A-Za-z]/', '', explode(' ', trim($rawResponse))[0] ?? ''));
-                        if (in_array($firstWord, $enabledCategories)) {
+                    // Try to match response to one of the expert names
+                    foreach ($expertNames as $expertName) {
+                        if (strpos($upperResponse, $expertName) !== false) {
+                            $classification = $expertName;
+                            break;
+                        }
+                    }
+                    
+                    // If no match, try first word
+                    if ($classification === null) {
+                        $firstWord = strtoupper(preg_replace('/[^A-Za-z0-9_]/', '', explode(' ', trim($rawResponse))[0] ?? ''));
+                        if (in_array($firstWord, $expertNames)) {
                             $classification = $firstWord;
                         }
                     }
@@ -650,7 +1164,8 @@ Respond with exactly one word - one of: $categoriesList:";
                     }
                 }
                 
-                $defaultRoute = $textEnabled ? 'TEXT' : ($enabledCategories[0] ?? 'TEXT');
+                // Default to first expert
+                $defaultRoute = $expertNames[0] ?? 'EXPERT_1';
                 $response = ['success' => true, 'route' => $defaultRoute, 'fallback' => true];
                 break;
                 
@@ -861,29 +1376,31 @@ Your response (number or NULL):";
                 
             case 'save_governor_config':
                 $configData = [
-                    'text_model' => trim($data['text_model'] ?? ''),
-                    'code_model' => trim($data['code_model'] ?? ''),
-                    'medical_model' => trim($data['medical_model'] ?? ''),
                     'aux_model' => trim($data['aux_model'] ?? ''),
-                    'text_enabled' => filter_var($data['text_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN),
-                    'code_enabled' => filter_var($data['code_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN),
-                    'medical_enabled' => filter_var($data['medical_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN),
                     'aux_cpu_only' => filter_var($data['aux_cpu_only'] ?? true, FILTER_VALIDATE_BOOLEAN),
                     'aux_context_length' => max(512, min(32768, (int)($data['aux_context_length'] ?? 2048))),
                     'aux_port' => max(1, min(65535, (int)($data['aux_port'] ?? 8081))),
                     'expert_port' => max(1, min(65535, (int)($data['expert_port'] ?? 8080))),
                     'velocity_enabled' => filter_var($data['velocity_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN),
                     'velocity_threshold' => max(10, min(90, (int)($data['velocity_threshold'] ?? 40))),
-                    'velocity_char_threshold' => max(100, min(10000, (int)($data['velocity_char_threshold'] ?? 500))),
+                    'velocity_char_threshold' => max(100, min(10000, (int)($data['velocity_char_threshold'] ?? 1500))),
                     'velocity_index_prompt' => trim($data['velocity_index_prompt'] ?? '') ?: DEFAULT_CONFIG['velocity_index_prompt'],
                     'velocity_recall_prompt' => trim($data['velocity_recall_prompt'] ?? '') ?: DEFAULT_CONFIG['velocity_recall_prompt'],
                     'enable_pruning' => filter_var($data['enable_pruning'] ?? true, FILTER_VALIDATE_BOOLEAN),
                     'prune_threshold' => max(100, min(10000, (int)($data['prune_threshold'] ?? 1500))),
-                    'prune_prompt' => trim($data['prune_prompt'] ?? DEFAULT_CONFIG['prune_prompt']) ?: DEFAULT_CONFIG['prune_prompt'],
-                    'text_system_prompt' => trim($data['text_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.'),
-                    'code_system_prompt' => trim($data['code_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.'),
-                    'medical_system_prompt' => trim($data['medical_system_prompt'] ?? 'You are a helpful assistant. Provide detailed, accurate responses.')
+                    'prune_prompt' => trim($data['prune_prompt'] ?? DEFAULT_CONFIG['prune_prompt']) ?: DEFAULT_CONFIG['prune_prompt']
                 ];
+                
+                // Save 10 expert slots
+                $defaultNames = ['Text', 'Code', 'Medical', 'Electrical', 'Vehicle', 'Expert 6', 'Expert 7', 'Expert 8', 'Expert 9', 'Expert 10'];
+                $defaultEnabled = [true, true, true, true, true, false, false, false, false, false];
+                
+                for ($i = 1; $i <= 10; $i++) {
+                    $configData["expert_{$i}_model"] = trim($data["expert_{$i}_model"] ?? '');
+                    $configData["expert_{$i}_name"] = trim($data["expert_{$i}_name"] ?? '') ?: $defaultNames[$i-1];
+                    $configData["expert_{$i}_enabled"] = filter_var($data["expert_{$i}_enabled"] ?? $defaultEnabled[$i-1], FILTER_VALIDATE_BOOLEAN);
+                    $configData["expert_{$i}_system_prompt"] = trim($data["expert_{$i}_system_prompt"] ?? 'You are a helpful assistant. Provide detailed, accurate responses.');
+                }
                 
                 $configFile = "$governorDir/config.json";
                 $success = file_put_contents($configFile, json_encode($configData, JSON_PRETTY_PRINT)) !== false;
@@ -917,6 +1434,75 @@ Your response (number or NULL):";
             case 'server_status':
                 $status = detect_running_servers();
                 $response = ['success' => true, 'servers' => $status];
+                break;
+                
+            case 'calibrate_context':
+                $model = $data['model'] ?? '';
+                if (!$model) {
+                    $response = error_response('No model specified');
+                    break;
+                }
+                
+                $vramData = $data['vram'] ?? null;
+                
+                if (!$vramData) {
+                    $output = [];
+                    @exec('nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>&1', $output);
+                    if (!empty($output[0])) {
+                        $vramData = ['total' => (int)trim($output[0])];
+                    }
+                }
+                
+                if (!$vramData || !isset($vramData['total']) || $vramData['total'] <= 0) {
+                    $response = error_response('VRAM detection failed');
+                    break;
+                }
+                
+                try {
+                    $result = calibrate_model_context($model, $vramData);
+                    
+                    if ($result['success']) {
+                        $cache = load_context_cache();
+                        $cache[$model] = [
+                            'max_context' => $result['max_context'],
+                            'architecture' => $result['architecture'] ?? null,
+                            'theoretical_max' => $result['theoretical_max'] ?? null,
+                            'tested_on_vram' => $vramData['total'],
+                            'calibrated_at' => date('c'),
+                            'method' => $result['method'] ?? 'unknown'
+                        ];
+                        save_context_cache($cache);
+                    }
+                    
+                    $response = $result;
+                } catch (Throwable $e) {
+                    $response = error_response('Calibration failed: ' . $e->getMessage());
+                }
+                break;
+                
+            case 'get_cached_context':
+                $model = $data['model'] ?? '';
+                if (!$model) {
+                    $response = ['success' => false];
+                    break;
+                }
+                
+                $cache = load_context_cache();
+                if (isset($cache[$model])) {
+                    $cached = $cache[$model];
+                    $response = [
+                        'success' => true,
+                        'cached_context' => $cached['max_context'],
+                        'calibration_info' => $cached
+                    ];
+                } else {
+                    $response = ['success' => true, 'cached_context' => null];
+                }
+                break;
+                
+            case 'get_context_cache':
+                $cache = load_context_cache();
+                $response = ['success' => true, 'cache' => $cache];
                 break;
                 
             /* ===== SERVER LIFECYCLE ACTIONS ===== */
@@ -1060,9 +1646,18 @@ Your response (number or NULL):";
                 this.serverAvailable = false;
                 
                 this.governorConfig = {
-                    textModel: '',
-                    codeModel: '',
-                    medicalModel: '',
+                    experts: [
+                        { model: '', name: 'Text', enabled: true, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Code', enabled: true, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Medical', enabled: true, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Electrical', enabled: true, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Vehicle', enabled: true, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Expert 6', enabled: false, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Expert 7', enabled: false, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Expert 8', enabled: false, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Expert 9', enabled: false, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' },
+                        { model: '', name: 'Expert 10', enabled: false, systemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.' }
+                    ],
                     auxModel: '',
                     auxContextLength: 2048,
                     auxCpuOnly: true,
@@ -1072,10 +1667,7 @@ Your response (number or NULL):";
                     velocityThreshold: 40,
                     velocityCharThreshold: 1500,
                     velocityIndexPrompt: 'Create a brief, descriptive title (max 10 words) that captures the key topic or intent of this message. Return ONLY the title, nothing else.',
-                    velocityRecallPrompt: 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL',
-                    textSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.',
-                    codeSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.',
-                    medicalSystemPrompt: 'You are a helpful assistant. Provide detailed, accurate responses.'
+                    velocityRecallPrompt: 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL'
                 };
                 this.availableModels = [];
                 this.vramInfo = null;
@@ -1178,24 +1770,69 @@ Your response (number or NULL):";
             }
             
             async stageAutoPruneUser(ctx) {
-                if (!this.pruningConfig.enabled || !this.governorConfig.auxModel) return;
+                if (!this.pruningConfig.enabled || !this.governorConfig.auxModel) {
+                    console.log('[PRUNE] Auto-prune skipped for user message', {
+                        enabled: this.pruningConfig.enabled,
+                        hasAuxModel: !!this.governorConfig.auxModel,
+                        reason: !this.pruningConfig.enabled ? 'disabled' : 'no aux model'
+                    });
+                    return;
+                }
 
                 const msg = this.messages[ctx.userIndex];
                 const text = msg.fullContent || msg.content;
+                
+                console.log('[PRUNE] stageAutoPruneUser - checking message', {
+                    messageIndex: ctx.userIndex,
+                    textLength: text.length,
+                    threshold: this.pruningConfig.threshold,
+                    willPrune: text.length >= this.pruningConfig.threshold,
+                    hasFullContent: !!msg.fullContent
+                });
 
-                if (text.length < this.pruningConfig.threshold) return;
+                if (text.length < this.pruningConfig.threshold) {
+                    console.log('[PRUNE] User message below threshold, skipping', {
+                        textLength: text.length,
+                        threshold: this.pruningConfig.threshold
+                    });
+                    return;
+                }
 
                 this.updateStatus('Pruning message...', 'pruning');
+                
+                console.log('[PRUNE] Starting prune operation for user message', {
+                    textLength: text.length,
+                    textPreview: text.substring(0, 200) + (text.length > 200 ? '...' : '')
+                });
+                
                 const pruned = await this.pruneMessage(text);
 
                 if (pruned) {
+                    console.log('[PRUNE] User message prune successful', {
+                        originalLength: text.length,
+                        prunedLength: pruned.length,
+                        savedChars: text.length - pruned.length
+                    });
+                    
                     msg.prunedContent = pruned;
                     const [o, p] = await Promise.all([
                         this.countTokens(text),
                         this.countTokens(pruned)
                     ]);
+                    
+                    console.log('[PRUNE] User message token counts', {
+                        originalTokens: o,
+                        prunedTokens: p,
+                        savedTokens: o && p ? Math.max(0, o - p) : 0
+                    });
+                    
                     if (o && p) this.tokenTracker.savedTokens += Math.max(0, o - p);
                     this.rerenderMessages();
+                } else {
+                    console.error('[PRUNE] User message prune returned null', {
+                        prunedValue: pruned,
+                        messageLength: text.length
+                    });
                 }
                 this.updateStatus('');
             }
@@ -1296,16 +1933,49 @@ Your response (number or NULL):";
             
             async stageFinalize(ctx) {
                 const msg = this.messages.at(-1);
+                
+                console.log('[PRUNE] stageFinalize - checking assistant response', {
+                    pruningEnabled: this.pruningConfig.enabled,
+                    hasAuxModel: !!this.governorConfig.auxModel,
+                    messageLength: msg.content.length,
+                    threshold: this.pruningConfig.threshold,
+                    willPrune: this.pruningConfig.enabled && this.governorConfig.auxModel && msg.content.length >= this.pruningConfig.threshold
+                });
+                
                 if (this.pruningConfig.enabled && this.governorConfig.auxModel &&
                     msg.content.length >= this.pruningConfig.threshold) {
 
                     this.updateStatus('Pruning response...', 'pruning');
+                    
+                    console.log('[PRUNE] Starting prune operation for assistant response', {
+                        contentLength: msg.content.length,
+                        contentPreview: msg.content.substring(0, 200) + (msg.content.length > 200 ? '...' : '')
+                    });
+                    
                     const pruned = await this.pruneMessage(msg.content);
+                    
                     if (pruned) {
+                        console.log('[PRUNE] Assistant response prune successful', {
+                            originalLength: msg.content.length,
+                            prunedLength: pruned.length,
+                            savedChars: msg.content.length - pruned.length
+                        });
+                        
                         msg.prunedContent = pruned;
                         this.rerenderMessages();
+                    } else {
+                        console.error('[PRUNE] Assistant response prune returned null', {
+                            prunedValue: pruned,
+                            messageLength: msg.content.length
+                        });
                     }
                     this.updateStatus('');
+                } else {
+                    console.log('[PRUNE] Assistant response pruning skipped', {
+                        reason: !this.pruningConfig.enabled ? 'pruning disabled' :
+                                !this.governorConfig.auxModel ? 'no aux model' :
+                                'below threshold'
+                    });
                 }
 
                 await this.saveChatToHistory();
@@ -1371,27 +2041,18 @@ Your response (number or NULL):";
                 this.attachBtn = this.$('attachBtn');
                 this.attachmentsPreview = this.$('attachmentsPreview');
                 
-                this.governorTextModel = this.$('governorTextModel');
-                this.governorCodeModel = this.$('governorCodeModel');
-                this.governorMedicalModel = this.$('governorMedicalModel');
+                // Dynamic expert slot container
+                this.expertSlotsContainer = this.$('expertSlotsContainer');
+                
+                // Auxiliary model elements
                 this.governorAuxModel = this.$('governorAuxModel');
                 this.governorAuxCpuOnly = this.$('governorAuxCpuOnly');
-                this.governorTextEnabled = this.$('governorTextEnabled');
-                this.governorCodeEnabled = this.$('governorCodeEnabled');
-                this.governorMedicalEnabled = this.$('governorMedicalEnabled');
                 this.auxContextLength = this.$('auxContextLength');
                 this.vramValue = this.$('vramValue');
                 this.vramGpu = this.$('vramGpu');
-                this.textModelSize = this.$('textModelSize');
-                this.codeModelSize = this.$('codeModelSize');
-                this.medicalModelSize = this.$('medicalModelSize');
                 this.auxModelSize = this.$('auxModelSize');
                 this.expertServerStatus = this.$('expertServerStatus');
                 this.auxServerStatus = this.$('auxServerStatus');
-                
-                this.textSystemPrompt = this.$('textSystemPrompt');
-                this.codeSystemPrompt = this.$('codeSystemPrompt');
-                this.medicalSystemPrompt = this.$('medicalSystemPrompt');
                 
                 this.startupOverlay = this.$('startupOverlay');
                 this.startupTitle = this.$('startupTitle');
@@ -1406,6 +2067,53 @@ Your response (number or NULL):";
                 this.velocityStats = this.$('velocityStats');
                 this.velocityIndexedCount = this.$('velocityIndexedCount');
                 this.velocityRecallCount = this.$('velocityRecallCount');
+                
+                // Generate expert slot UI elements
+                this.generateExpertSlotUI();
+            }
+            
+            generateExpertSlotUI() {
+                const defaultNames = ['Text', 'Code', 'Medical', 'Electrical', 'Vehicle', 'Expert 6', 'Expert 7', 'Expert 8', 'Expert 9', 'Expert 10'];
+                const defaultEnabled = [true, true, true, true, true, false, false, false, false, false];
+                
+                // Generate expert slots HTML with inline system prompts
+                let slotsHtml = '';
+                for (let i = 1; i <= 10; i++) {
+                    slotsHtml += `
+                        <div class="model-select-wrapper expert-slot" data-slot="${i}">
+                            <div class="model-select-label">
+                                <div class="settings-checkbox" style="margin:0">
+                                    <input type="checkbox" id="expert${i}Enabled" ${defaultEnabled[i-1] ? 'checked' : ''}>
+                                    <label for="expert${i}Enabled">${defaultNames[i-1]}</label>
+                                </div>
+                                <span class="model-size" id="expert${i}ModelSize"></span>
+                            </div>
+                            <input type="text" class="settings-input expert-name-input" id="expert${i}Name" value="${defaultNames[i-1]}" placeholder="Expert name...">
+                            <select class="model-select" id="expert${i}Model" style="margin-top:0.5rem"><option value="">Select a model...</option></select>
+                            <label class="settings-label" id="expert${i}PromptLabel" style="margin-top:0.75rem;font-size:0.8rem">${defaultNames[i-1]} System Prompt</label>
+                            <textarea class="settings-textarea" id="expert${i}SystemPrompt" rows="2" style="margin-top:0.25rem">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
+                        </div>
+                    `;
+                }
+                this.expertSlotsContainer.innerHTML = slotsHtml;
+                
+                // Add event listeners for name changes to update prompt labels and checkbox labels
+                for (let i = 1; i <= 10; i++) {
+                    const nameInput = this.$(`expert${i}Name`);
+                    const promptLabel = this.$(`expert${i}PromptLabel`);
+                    const enabledCheckbox = this.$(`expert${i}Enabled`);
+                    const enabledLabel = enabledCheckbox?.nextElementSibling;
+                    
+                    nameInput?.addEventListener('input', () => {
+                        const name = nameInput.value.trim() || `Expert ${i}`;
+                        if (promptLabel) promptLabel.textContent = `${name} System Prompt`;
+                        if (enabledLabel) enabledLabel.textContent = name;
+                    });
+                    
+                    // Add change listener for model size display
+                    const modelSelect = this.$(`expert${i}Model`);
+                    modelSelect?.addEventListener('change', () => this.updateModelSizeDisplay());
+                }
             }
             
             async init() {
@@ -1423,24 +2131,34 @@ Your response (number or NULL):";
                 try {
                     const configData = await this.apiCall('load_governor_config');
                     if (configData.success) {
+                        // Build experts array from config
+                        const defaultNames = ['Text', 'Code', 'Medical', 'Electrical', 'Vehicle', 'Expert 6', 'Expert 7', 'Expert 8', 'Expert 9', 'Expert 10'];
+                        const defaultEnabled = [true, true, true, true, true, false, false, false, false, false];
+                        
                         this.governorConfig = {
-                            textModel: configData.config.text_model || '',
-                            codeModel: configData.config.code_model || '',
-                            medicalModel: configData.config.medical_model || '',
+                            experts: [],
                             auxModel: configData.config.aux_model || '',
                             auxContextLength: configData.config.aux_context_length || 2048,
-                            textEnabled: configData.config.text_enabled !== false,
-                            codeEnabled: configData.config.code_enabled !== false,
-                            medicalEnabled: configData.config.medical_enabled !== false,
                             auxCpuOnly: configData.config.aux_cpu_only !== false,
                             auxPort: configData.config.aux_port || 8081,
                             expertPort: configData.config.expert_port || 8080,
                             velocityEnabled: configData.config.velocity_enabled !== false,
                             velocityThreshold: configData.config.velocity_threshold || 40,
                             velocityCharThreshold: configData.config.velocity_char_threshold || 1500,
-                            velocityIndexPrompt: configData.config.velocity_index_prompt || this.governorConfig.velocityIndexPrompt,
-                            velocityRecallPrompt: configData.config.velocity_recall_prompt || this.governorConfig.velocityRecallPrompt
+                            velocityIndexPrompt: configData.config.velocity_index_prompt || '',
+                            velocityRecallPrompt: configData.config.velocity_recall_prompt || ''
                         };
+                        
+                        // Load 10 expert slots
+                        for (let i = 1; i <= 10; i++) {
+                            this.governorConfig.experts.push({
+                                model: configData.config[`expert_${i}_model`] || '',
+                                name: configData.config[`expert_${i}_name`] || defaultNames[i-1],
+                                enabled: configData.config[`expert_${i}_enabled`] !== undefined ? configData.config[`expert_${i}_enabled`] : defaultEnabled[i-1],
+                                systemPrompt: configData.config[`expert_${i}_system_prompt`] || 'You are a helpful assistant. Provide detailed, accurate responses.'
+                            });
+                        }
+                        
                         this.pruningConfig.enabled = configData.config.enable_pruning !== false;
                         this.pruningConfig.threshold = configData.config.prune_threshold || 1500;
                         this.pruningConfig.prunePrompt = configData.config.prune_prompt || this.pruningConfig.prunePrompt;
@@ -1522,9 +2240,8 @@ Your response (number or NULL):";
                     });
                 });
                 
-                this.governorTextModel.addEventListener('change', () => this.updateModelSizeDisplay());
-                this.governorCodeModel.addEventListener('change', () => this.updateModelSizeDisplay());
-                this.governorAuxModel.addEventListener('change', () => this.updateModelSizeDisplay());
+                // Aux model change listener
+                this.governorAuxModel?.addEventListener('change', () => this.updateModelSizeDisplay());
                 
                 document.addEventListener('keydown', e => {
                     if (e.key === 'Escape') {
@@ -1787,11 +2504,51 @@ Your response (number or NULL):";
             }
             
             async pruneMessage(message) {
-                const data = await this.auxApiCall('prune_message', {
-                    message,
-                    prompt: this.pruningConfig.prunePrompt
+                console.log('[PRUNE] Client-side pruneMessage called', {
+                    messageLength: message.length,
+                    messagePreview: message.substring(0, 200) + (message.length > 200 ? '...' : ''),
+                    prunePrompt: this.pruningConfig.prunePrompt,
+                    timestamp: new Date().toISOString()
                 });
-                return data.success ? data.pruned : null;
+                
+                try {
+                    const data = await this.auxApiCall('prune_message', {
+                        message,
+                        prompt: this.pruningConfig.prunePrompt
+                    });
+                    
+                    console.log('[PRUNE] Received response from server', {
+                        success: data.success,
+                        hasPruned: !!data.pruned,
+                        prunedLength: data.pruned ? data.pruned.length : 0,
+                        error: data.error || 'none',
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    if (data.success && data.pruned) {
+                        console.log('[PRUNE] Prune successful', {
+                            originalLength: message.length,
+                            prunedLength: data.pruned.length,
+                            compressionRatio: Math.round((1 - data.pruned.length / message.length) * 100) + '%',
+                            prunedPreview: data.pruned.substring(0, 200) + (data.pruned.length > 200 ? '...' : '')
+                        });
+                    } else {
+                        console.error('[PRUNE] Prune failed or returned null', {
+                            success: data.success,
+                            error: data.error,
+                            fullResponse: data
+                        });
+                    }
+                    
+                    return data.success ? data.pruned : null;
+                } catch (error) {
+                    console.error('[PRUNE] Exception in pruneMessage', {
+                        error: error.message,
+                        stack: error.stack,
+                        timestamp: new Date().toISOString()
+                    });
+                    return null;
+                }
             }
             
             async updateTokenUsage() {
@@ -1887,7 +2644,7 @@ Your response (number or NULL):";
                 // Remove all state classes
                 this.statusBox.classList.remove(
                     'pruning', 'generating', 'error', 'routing', 'indexing', 
-                    'searching', 'switching', 'ready', 'stopped', 'offline', 'warning'
+                    'searching', 'switching', 'learning', 'ready', 'stopped', 'offline', 'warning'
                 );
                 icon.classList.remove('spinner');
                 
@@ -1925,6 +2682,12 @@ Your response (number or NULL):";
                     'Switching models...': { 
                         text: status, 
                         state: 'switching',
+                        icon: '<path d="M12 3a9 9 0 1 0 9 9" stroke-width="2" stroke-linecap="round"/>',
+                        spin: true
+                    },
+                    'Learning GPU...': { 
+                        text: status, 
+                        state: 'learning',
                         icon: '<path d="M12 3a9 9 0 1 0 9 9" stroke-width="2" stroke-linecap="round"/>',
                         spin: true
                     },
@@ -2862,27 +3625,33 @@ Your response (number or NULL):";
                 // Load governor config
                 const configData = await this.apiCall('load_governor_config');
                 if (configData.success) {
+                    // Build experts array from config
                     this.governorConfig = {
-                        textModel: configData.config.text_model || '',
-                        codeModel: configData.config.code_model || '',
-                        medicalModel: configData.config.medical_model || '',
+                        experts: [],
                         auxModel: configData.config.aux_model || '',
                         auxContextLength: configData.config.aux_context_length || 2048,
-                        textEnabled: configData.config.text_enabled !== false,
-                        codeEnabled: configData.config.code_enabled !== false,
-                        medicalEnabled: configData.config.medical_enabled !== false,
                         auxCpuOnly: configData.config.aux_cpu_only !== false,
                         auxPort: configData.config.aux_port || 8081,
                         expertPort: configData.config.expert_port || 8080,
                         velocityEnabled: configData.config.velocity_enabled !== false,
                         velocityThreshold: configData.config.velocity_threshold || 40,
                         velocityCharThreshold: configData.config.velocity_char_threshold || 1500,
-                        velocityIndexPrompt: configData.config.velocity_index_prompt || this.governorConfig.velocityIndexPrompt,
-                        velocityRecallPrompt: configData.config.velocity_recall_prompt || this.governorConfig.velocityRecallPrompt,
-                        textSystemPrompt: configData.config.text_system_prompt || this.governorConfig.textSystemPrompt,
-                        codeSystemPrompt: configData.config.code_system_prompt || this.governorConfig.codeSystemPrompt,
-                        medicalSystemPrompt: configData.config.medical_system_prompt || this.governorConfig.medicalSystemPrompt
+                        velocityIndexPrompt: configData.config.velocity_index_prompt || this.governorConfig?.velocityIndexPrompt || '',
+                        velocityRecallPrompt: configData.config.velocity_recall_prompt || this.governorConfig?.velocityRecallPrompt || ''
                     };
+                    
+                    // Load 10 expert slots
+                    const defaultNames = ['Text', 'Code', 'Medical', 'Electrical', 'Vehicle', 'Expert 6', 'Expert 7', 'Expert 8', 'Expert 9', 'Expert 10'];
+                    const defaultEnabled = [true, true, true, true, true, false, false, false, false, false];
+                    
+                    for (let i = 1; i <= 10; i++) {
+                        this.governorConfig.experts.push({
+                            model: configData.config[`expert_${i}_model`] || '',
+                            name: configData.config[`expert_${i}_name`] || defaultNames[i-1],
+                            enabled: configData.config[`expert_${i}_enabled`] !== undefined ? configData.config[`expert_${i}_enabled`] : defaultEnabled[i-1],
+                            systemPrompt: configData.config[`expert_${i}_system_prompt`] || 'You are a helpful assistant. Provide detailed, accurate responses.'
+                        });
+                    }
                     
                     this.pruningConfig.enabled = configData.config.enable_pruning !== false;
                     this.pruningConfig.threshold = configData.config.prune_threshold || 1500;
@@ -2896,52 +3665,69 @@ Your response (number or NULL):";
             }
             
             populateModelDropdowns() {
-                const dropdowns = [
-                    this.governorTextModel,
-                    this.governorCodeModel,
-                    this.governorMedicalModel,
-                    this.governorAuxModel
-                ];
-                
-                dropdowns.forEach(dropdown => {
-                    const currentValue = dropdown.value;
-                    dropdown.innerHTML = '<option value="">Select a model...</option>';
+                // Populate aux model dropdown
+                const auxDropdown = this.governorAuxModel;
+                if (auxDropdown) {
+                    const currentValue = auxDropdown.value;
+                    auxDropdown.innerHTML = '<option value="">Select a model...</option>';
                     
                     this.availableModels.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model.filename;
                         option.textContent = model.filename;
                         option.dataset.size = model.sizeFormatted;
-                        dropdown.appendChild(option);
+                        auxDropdown.appendChild(option);
                     });
                     
-                    // Restore selection if it exists
-                    if (currentValue) {
-                        dropdown.value = currentValue;
+                    if (currentValue) auxDropdown.value = currentValue;
+                }
+                
+                // Populate expert model dropdowns
+                for (let i = 1; i <= 10; i++) {
+                    const dropdown = this.$(`expert${i}Model`);
+                    if (dropdown) {
+                        const currentValue = dropdown.value;
+                        dropdown.innerHTML = '<option value="">Select a model...</option>';
+                        
+                        this.availableModels.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.filename;
+                            option.textContent = model.filename;
+                            option.dataset.size = model.sizeFormatted;
+                            dropdown.appendChild(option);
+                        });
+                        
+                        if (currentValue) dropdown.value = currentValue;
                     }
-                });
+                }
             }
             
             updateGovernorUI() {
-                this.governorTextModel.value = this.governorConfig.textModel;
-                this.governorCodeModel.value = this.governorConfig.codeModel;
-                this.governorMedicalModel.value = this.governorConfig.medicalModel || '';
-                this.governorAuxModel.value = this.governorConfig.auxModel;
-                this.governorAuxCpuOnly.checked = this.governorConfig.auxCpuOnly;
-                this.governorTextEnabled.checked = this.governorConfig.textEnabled !== false;
-                this.governorCodeEnabled.checked = this.governorConfig.codeEnabled !== false;
-                this.governorMedicalEnabled.checked = this.governorConfig.medicalEnabled !== false;
-                this.auxContextLength.value = this.governorConfig.auxContextLength || 2048;
+                // Update aux model UI
+                if (this.governorAuxModel) this.governorAuxModel.value = this.governorConfig.auxModel;
+                if (this.governorAuxCpuOnly) this.governorAuxCpuOnly.checked = this.governorConfig.auxCpuOnly;
+                if (this.auxContextLength) this.auxContextLength.value = this.governorConfig.auxContextLength || 2048;
                 
-                // System prompts
-                if (this.textSystemPrompt) {
-                    this.textSystemPrompt.value = this.governorConfig.textSystemPrompt || '';
-                }
-                if (this.codeSystemPrompt) {
-                    this.codeSystemPrompt.value = this.governorConfig.codeSystemPrompt || '';
-                }
-                if (this.medicalSystemPrompt) {
-                    this.medicalSystemPrompt.value = this.governorConfig.medicalSystemPrompt || '';
+                // Update 10 expert slot UIs
+                if (this.governorConfig.experts) {
+                    for (let i = 1; i <= 10; i++) {
+                        const expert = this.governorConfig.experts[i-1];
+                        if (!expert) continue;
+                        
+                        const modelSelect = this.$(`expert${i}Model`);
+                        const nameInput = this.$(`expert${i}Name`);
+                        const enabledCheckbox = this.$(`expert${i}Enabled`);
+                        const systemPrompt = this.$(`expert${i}SystemPrompt`);
+                        const promptLabel = this.$(`expert${i}PromptLabel`);
+                        const enabledLabel = enabledCheckbox?.nextElementSibling;
+                        
+                        if (modelSelect) modelSelect.value = expert.model;
+                        if (nameInput) nameInput.value = expert.name;
+                        if (enabledCheckbox) enabledCheckbox.checked = expert.enabled;
+                        if (systemPrompt) systemPrompt.value = expert.systemPrompt;
+                        if (promptLabel) promptLabel.textContent = `${expert.name} Expert Prompt`;
+                        if (enabledLabel) enabledLabel.textContent = expert.name;
+                    }
                 }
                 
                 // Velocity Index settings
@@ -2971,10 +3757,20 @@ Your response (number or NULL):";
                     return model ? model.sizeFormatted : '';
                 };
                 
-                this.textModelSize.textContent = getSize(this.governorTextModel.value);
-                this.codeModelSize.textContent = getSize(this.governorCodeModel.value);
-                this.medicalModelSize.textContent = getSize(this.governorMedicalModel.value);
-                this.auxModelSize.textContent = getSize(this.governorAuxModel.value);
+                // Update aux model size
+                const auxSizeEl = this.$('auxModelSize');
+                if (auxSizeEl && this.governorAuxModel) {
+                    auxSizeEl.textContent = getSize(this.governorAuxModel.value);
+                }
+                
+                // Update 10 expert model sizes
+                for (let i = 1; i <= 10; i++) {
+                    const sizeEl = this.$(`expert${i}ModelSize`);
+                    const modelSelect = this.$(`expert${i}Model`);
+                    if (sizeEl && modelSelect) {
+                        sizeEl.textContent = getSize(modelSelect.value);
+                    }
+                }
             }
             
             // ===== SERVER MANAGEMENT =====
@@ -3054,25 +3850,37 @@ Your response (number or NULL):";
             }
             
             async startExpertServer(expertType) {
-                // expertType is 'TEXT', 'CODE', or 'MEDICAL'
-                let model;
-                switch(expertType) {
-                    case 'CODE':
-                        model = this.governorConfig.codeModel;
-                        break;
-                    case 'MEDICAL':
-                        model = this.governorConfig.medicalModel;
-                        break;
-                    default:
-                        model = this.governorConfig.textModel;
+                // expertType is now the name of the expert (e.g., 'CODE', 'TEXT', 'ELECTRICAL', etc.)
+                // Find the expert by name (case-insensitive)
+                const expertName = expertType.toUpperCase();
+                const expert = this.governorConfig.experts?.find(e => 
+                    e.name.toUpperCase() === expertName && e.enabled && e.model
+                );
+                
+                // If not found by name, try to find by index (e.g., 'EXPERT_1')
+                let model = expert?.model;
+                if (!model && expertName.startsWith('EXPERT_')) {
+                    const index = parseInt(expertName.split('_')[1]) - 1;
+                    if (index >= 0 && index < this.governorConfig.experts?.length) {
+                        const indexedExpert = this.governorConfig.experts[index];
+                        if (indexedExpert.enabled && indexedExpert.model) {
+                            model = indexedExpert.model;
+                        }
+                    }
+                }
+                
+                if (!model) {
+                    // Fallback: find any enabled expert with a model
+                    const fallbackExpert = this.governorConfig.experts?.find(e => e.enabled && e.model);
+                    model = fallbackExpert?.model;
                 }
                 
                 if (!model) {
                     throw new Error(`No ${expertType.toLowerCase()} model configured`);
                 }
                 
-                // Calculate safe context size based on model file size
-                const contextSize = this.calculateSafeContext(model);
+                // Check if we need to calibrate this model
+                const contextSize = await this.getOptimalContext(model);
                 
                 const result = await this.apiCall('start_server', {
                     type: 'expert',
@@ -3090,32 +3898,165 @@ Your response (number or NULL):";
                 }
             }
             
-            calculateSafeContext(modelFilename) {
-                const modelInfo = this.availableModels.find(m => m.filename === modelFilename);
-                const modelSizeMB = modelInfo.size / (1024 * 1024);
-                const modelSizeGB = modelSizeMB / 1024;
+            async getOptimalContext(modelFilename) {
+                const cacheData = await this.apiCall('get_context_cache');
+                const cache = cacheData.success ? (cacheData.cache || {}) : {};
                 
-                if (!this.vramInfo?.total) {
-                    console.error('[Governor] VRAM not detected');
+                if (cache[modelFilename]) {
+                    return cache[modelFilename].max_context;
+                }
+                
+                this.updateStatus('Learning GPU...', 'learning');
+                
+                try {
+                    const calibrationData = { model: modelFilename };
+                    
+                    if (this.vramInfo && this.vramInfo.total) {
+                        calibrationData.vram = { total: this.vramInfo.total };
+                    }
+                    
+                    const result = await this.apiCall('calibrate_context', calibrationData);
+                    
+                    if (result.success) {
+                        return result.max_context;
+                    } else {
+                        return this.calculateSafeContext(modelFilename);
+                    }
+                } catch (error) {
+                    return this.calculateSafeContext(modelFilename);
+                }
+            }
+            
+            async calculateSafeContext(modelFilename) {
+                // Step 1: Check if we have a calibrated value for this model
+                const cacheResult = await this.apiCall('get_cached_context', { model: modelFilename });
+                if (cacheResult.success && cacheResult.cached_context) {
+                    console.log('[Governor] Using cached context for', modelFilename, ':', cacheResult.cached_context);
+                    return cacheResult.cached_context;
+                }
+                
+                // Step 2: Fall back to conservative calculation
+                const modelInfo = this.availableModels.find(m => m.filename === modelFilename);
+                if (!modelInfo) {
+                    console.error('[Governor] Model not found:', modelFilename);
                     return 2048;
                 }
                 
+                const modelSizeBytes = modelInfo.size;
+                const modelSizeMB = modelSizeBytes / (1024 * 1024);
+                
+                if (!this.vramInfo?.total) {
+                    console.error('[Governor] VRAM not detected, using conservative context');
+                    return 2048;
+                }
+                
+                // Conservative calculation (15% VRAM headroom)
                 const vramTotalMB = this.vramInfo.total;
-                const vramReserveMB = vramTotalMB * 0.10;
-                const vramAvailableMB = Math.max(0, vramTotalMB - vramReserveMB);
-                const vramForContextMB = Math.max(0, vramAvailableMB - modelSizeMB);
+                const vramUsableMB = vramTotalMB * 0.85;
                 
-                let mbPer1kContext;
-                if (modelSizeGB < 1) mbPer1kContext = 100;
-                else if (modelSizeGB < 3) mbPer1kContext = 200;
-                else if (modelSizeGB < 8) mbPer1kContext = 400;
-                else mbPer1kContext = 800;
+                // Step 2: Account for model weight memory
+                const vramAfterModelMB = vramUsableMB - modelSizeMB;
                 
-                let context = Math.floor((vramForContextMB / mbPer1kContext) * 1000);
-                context = Math.max(512, context);
-                context = Math.floor(context / 256) * 256;
+                if (vramAfterModelMB < 100) {
+                    console.warn('[Governor] Insufficient VRAM for this model');
+                    return 512; // Minimum viable context
+                }
                 
-                return context;
+                // Step 3: Estimate embedding dimensions from model size
+                // Rough heuristics based on common architectures:
+                // ~1B params  ≈ 2048 dim  (e.g., DeepSeek-Coder 1.3B, Gemma-3 1B)
+                // ~2B params  ≈ 2304 dim  (e.g., Gemma-2 2B)
+                // ~3B params  ≈ 2560 dim  (e.g., Phi-3)
+                // ~7B params  ≈ 4096 dim  (e.g., Llama-2/3 7B, Mistral 7B)
+                // ~13B params ≈ 5120 dim  (e.g., Llama-2 13B)
+                // ~70B params ≈ 8192 dim  (e.g., Llama-2/3 70B)
+                
+                let estimatedDim, estimatedLayers;
+                const modelSizeGB = modelSizeMB / 1024;
+                
+                if (modelSizeGB < 0.8) {
+                    // < 1B params
+                    estimatedDim = 1536;
+                    estimatedLayers = 18;
+                } else if (modelSizeGB < 1.8) {
+                    // ~1B params
+                    estimatedDim = 2048;
+                    estimatedLayers = 24;
+                } else if (modelSizeGB < 2.5) {
+                    // ~2B params
+                    estimatedDim = 2304;
+                    estimatedLayers = 26;
+                } else if (modelSizeGB < 3.5) {
+                    // ~3B params
+                    estimatedDim = 2560;
+                    estimatedLayers = 28;
+                } else if (modelSizeGB < 5.5) {
+                    // ~7B params
+                    estimatedDim = 4096;
+                    estimatedLayers = 32;
+                } else if (modelSizeGB < 10) {
+                    // ~13B params
+                    estimatedDim = 5120;
+                    estimatedLayers = 40;
+                } else if (modelSizeGB < 25) {
+                    // ~30B params
+                    estimatedDim = 6656;
+                    estimatedLayers = 48;
+                } else {
+                    // 70B+ params
+                    estimatedDim = 8192;
+                    estimatedLayers = 80;
+                }
+                
+                // Step 4: Calculate KV cache memory requirements
+                // KV cache formula (for FP16):
+                // bytes_per_token = 2 * layers * (k_dim + v_dim) * 2 bytes
+                // For most models: k_dim = v_dim = n_embd / n_heads * n_heads_kv
+                // Simplified: bytes_per_token ≈ 2 * layers * n_embd * 2
+                //
+                // Additional factors:
+                // - Modern models use GQA (grouped query attention), reducing KV cache
+                // - n_parallel=4 (default) multiplies cache by 4 for batch processing
+                // - llama.cpp uses FP16 for KV cache (2 bytes per value)
+                
+                const n_parallel = 4; // llama-server default
+                
+                // Base calculation: 2 layers (K and V) * 2 bytes (FP16)
+                const bytesPerTokenBase = estimatedLayers * estimatedDim * 2 * 2;
+                
+                // Account for GQA reduction (modern models use ~25-50% less KV cache)
+                const gqaFactor = modelSizeGB < 3 ? 0.6 : 0.75; // Smaller models often have more aggressive GQA
+                const bytesPerToken = bytesPerTokenBase * gqaFactor;
+                
+                // Total KV cache size for batch processing
+                const bytesPerContextToken = bytesPerToken * n_parallel;
+                
+                // Step 5: Calculate maximum context from available VRAM
+                const vramForKvCacheMB = vramAfterModelMB * 0.9; // Reserve 10% for overhead
+                const vramForKvCacheBytes = vramForKvCacheMB * 1024 * 1024;
+                
+                let maxContext = Math.floor(vramForKvCacheBytes / bytesPerContextToken);
+                
+                // Step 6: Apply practical constraints
+                // Clamp to reasonable minimums and maximums
+                maxContext = Math.max(512, maxContext);
+                maxContext = Math.min(131072, maxContext); // Max 128k context
+                
+                // Also respect common model training context limits to avoid warnings
+                // Most models are trained on specific context lengths
+                const commonContextLimits = [2048, 4096, 8192, 16384, 32768, 65536, 131072];
+                if (modelSizeGB < 2) {
+                    // Small models usually trained on 8k or less
+                    maxContext = Math.min(maxContext, 8192);
+                } else if (modelSizeGB < 5) {
+                    // Medium models often 16k
+                    maxContext = Math.min(maxContext, 16384);
+                }
+                
+                // Round down to nearest 256 for alignment
+                maxContext = Math.floor(maxContext / 256) * 256;
+                
+                return maxContext;
             }
             
             async switchExpert(newExpertType) {
@@ -3128,12 +4069,14 @@ Your response (number or NULL):";
                 
                 await this.startExpertServer(newExpertType);
                 
+                // Clear Learning GPU status immediately after server starts
+                this.updateStatus('');
+                
                 for (let i = 0; i < 60; i++) {
                     const status = await this.apiCall('server_status');
                     const expertStatus = status.servers?.find(s => s.type === 'expert');
                     if (expertStatus?.running && expertStatus?.healthy) {
                         this.updateServerStatusUI('expert', expertStatus);
-                        // Update context length from new expert
                         await this.initModelInfo();
                         return true;
                     }
@@ -3144,29 +4087,34 @@ Your response (number or NULL):";
             }
             
             async routeQuery(message) {
-                const hasEnabledExperts = 
-                    (this.governorConfig.textEnabled && this.governorConfig.textModel) ||
-                    (this.governorConfig.codeEnabled && this.governorConfig.codeModel) ||
-                    (this.governorConfig.medicalEnabled && this.governorConfig.medicalModel);
+                // Get enabled experts with models
+                const enabledExperts = this.governorConfig.experts?.filter(e => e.enabled && e.model) || [];
                 
-                if (!this.governorConfig.auxModel || !hasEnabledExperts) {
-                    if (this.governorConfig.textEnabled && this.governorConfig.textModel) return 'TEXT';
-                    if (this.governorConfig.codeEnabled && this.governorConfig.codeModel) return 'CODE';
-                    if (this.governorConfig.medicalEnabled && this.governorConfig.medicalModel) return 'MEDICAL';
-                    return 'TEXT';
+                if (!this.governorConfig.auxModel || enabledExperts.length === 0) {
+                    // Return first enabled expert with a model, or default to slot 1
+                    const firstEnabled = enabledExperts[0];
+                    return firstEnabled ? firstEnabled.name.toUpperCase() : 'EXPERT_1';
+                }
+                
+                if (enabledExperts.length === 1) {
+                    return enabledExperts[0].name.toUpperCase();
                 }
                 
                 this.updateStatus('Finding expert...', 'routing');
                 
-                const result = await this.auxApiCall('route_query', { message });
-                if (result.success) {
+                // Pass expert names for dynamic routing
+                const expertNames = enabledExperts.map(e => e.name.toUpperCase());
+                const result = await this.auxApiCall('route_query', { 
+                    message,
+                    expert_names: expertNames
+                });
+                
+                if (result.success && result.route) {
                     return result.route;
                 }
                 
-                if (this.governorConfig.textEnabled && this.governorConfig.textModel) return 'TEXT';
-                if (this.governorConfig.codeEnabled && this.governorConfig.codeModel) return 'CODE';
-                if (this.governorConfig.medicalEnabled && this.governorConfig.medicalModel) return 'MEDICAL';
-                return 'TEXT';
+                // Fallback to first enabled expert
+                return enabledExperts[0]?.name.toUpperCase() || 'EXPERT_1';
             }
             
             // ===== VELOCITY INDEX =====
@@ -3289,6 +4237,25 @@ Your response (number or NULL):";
                 return result;
             }
             
+            async calibrateModel(modelFilename) {
+                console.log('[Governor] Starting calibration for', modelFilename);
+                this.updateStatus('Calibrating ' + modelFilename + '...', 'calibrating');
+                
+                const result = await this.apiCall('calibrate_context', { model: modelFilename });
+                
+                if (result.success) {
+                    console.log('[Governor] Calibration complete:', result);
+                    this.updateStatus('');
+                    alert(`Calibration complete!\n\nMax context: ${result.max_context} tokens\nMethod: ${result.method}\nAttempts: ${result.attempts || 'N/A'}`);
+                } else {
+                    console.error('[Governor] Calibration failed:', result);
+                    this.updateStatus('');
+                    alert('Calibration failed: ' + (result.error || 'Unknown error'));
+                }
+                
+                return result;
+            }
+            
             async initializeGovernor() {
                 if (!this.governorConfig.auxModel) return;
                 
@@ -3332,22 +4299,31 @@ Your response (number or NULL):";
                     await new Promise(r => setTimeout(r, 1000));
                 }
                 
-                if (auxHealthy && this.governorConfig.textModel) {
-                    this.showStartupOverlay('Starting Servers...', 'Initializing the text expert model');
+                if (auxHealthy) {
+                    // Find the first enabled expert with a model
+                    const firstExpert = this.governorConfig.experts?.find(e => e.enabled && e.model);
                     
-                    await this.startExpertServer('TEXT');
-                    await new Promise(r => setTimeout(r, 4000));
-                    
-                    for (let i = 0; i < 60; i++) {
-                        const result = await this.apiCall('server_status');
-                        const expertStatus = result.servers?.find(s => s.type === 'expert');
-                        if (expertStatus?.running && expertStatus?.healthy) {
-                            this.updateServerStatusUI('expert', expertStatus);
-                            // Update context length from expert
-                            await this.initModelInfo();
-                            break;
+                    if (firstExpert) {
+                        this.showStartupOverlay('Starting Servers...', `Initializing the ${firstExpert.name} expert model`);
+                        
+                        await this.startExpertServer(firstExpert.name.toUpperCase());
+                        
+                        // Clear Learning GPU status immediately after server starts
+                        this.updateStatus('');
+                        
+                        await new Promise(r => setTimeout(r, 4000));
+                        
+                        for (let i = 0; i < 60; i++) {
+                            const result = await this.apiCall('server_status');
+                            const expertStatus = result.servers?.find(s => s.type === 'expert');
+                            if (expertStatus?.running && expertStatus?.healthy) {
+                                this.updateServerStatusUI('expert', expertStatus);
+                                // Update context length from expert
+                                await this.initModelInfo();
+                                break;
+                            }
+                            await new Promise(r => setTimeout(r, 1000));
                         }
-                        await new Promise(r => setTimeout(r, 1000));
                     }
                 }
                 
@@ -3370,29 +4346,33 @@ Your response (number or NULL):";
             async saveSettings() {
                 // Gather all settings
                 const configData = {
-                    text_model: this.governorTextModel.value,
-                    code_model: this.governorCodeModel.value,
-                    medical_model: this.governorMedicalModel.value,
-                    aux_model: this.governorAuxModel.value,
-                    text_enabled: this.governorTextEnabled.checked,
-                    code_enabled: this.governorCodeEnabled.checked,
-                    medical_enabled: this.governorMedicalEnabled.checked,
-                    aux_cpu_only: this.governorAuxCpuOnly.checked,
-                    aux_context_length: parseInt(this.auxContextLength.value) || 2048,
-                    aux_port: this.governorConfig.auxPort,
-                    expert_port: this.governorConfig.expertPort,
+                    aux_model: this.governorAuxModel?.value || '',
+                    aux_cpu_only: this.governorAuxCpuOnly?.checked ?? true,
+                    aux_context_length: parseInt(this.auxContextLength?.value) || 2048,
+                    aux_port: this.governorConfig.auxPort || 8081,
+                    expert_port: this.governorConfig.expertPort || 8080,
                     velocity_enabled: this.velocityEnabled?.checked ?? true,
                     velocity_threshold: Math.max(10, Math.min(90, parseInt(this.velocityThreshold?.value) || 40)),
                     velocity_char_threshold: Math.max(100, Math.min(10000, parseInt(this.velocityCharThreshold?.value) || 1500)),
-                    velocity_index_prompt: this.velocityIndexPrompt?.value?.trim() || this.governorConfig.velocityIndexPrompt,
-                    velocity_recall_prompt: this.velocityRecallPrompt?.value?.trim() || this.governorConfig.velocityRecallPrompt,
-                    enable_pruning: this.enablePruning.checked,
-                    prune_threshold: Math.max(100, Math.min(10000, parseInt(this.pruneThreshold.value) || 1500)),
-                    prune_prompt: this.prunePrompt.value.trim() || this.pruningConfig.prunePrompt,
-                    text_system_prompt: this.textSystemPrompt?.value?.trim() || this.governorConfig.textSystemPrompt,
-                    code_system_prompt: this.codeSystemPrompt?.value?.trim() || this.governorConfig.codeSystemPrompt,
-                    medical_system_prompt: this.medicalSystemPrompt?.value?.trim() || this.governorConfig.medicalSystemPrompt
+                    velocity_index_prompt: this.velocityIndexPrompt?.value?.trim() || this.governorConfig.velocityIndexPrompt || '',
+                    velocity_recall_prompt: this.velocityRecallPrompt?.value?.trim() || this.governorConfig.velocityRecallPrompt || '',
+                    enable_pruning: this.enablePruning?.checked ?? true,
+                    prune_threshold: Math.max(100, Math.min(10000, parseInt(this.pruneThreshold?.value) || 1500)),
+                    prune_prompt: this.prunePrompt?.value?.trim() || this.pruningConfig.prunePrompt
                 };
+                
+                // Gather 10 expert slots
+                for (let i = 1; i <= 10; i++) {
+                    const modelSelect = this.$(`expert${i}Model`);
+                    const nameInput = this.$(`expert${i}Name`);
+                    const enabledCheckbox = this.$(`expert${i}Enabled`);
+                    const systemPrompt = this.$(`expert${i}SystemPrompt`);
+                    
+                    configData[`expert_${i}_model`] = modelSelect?.value || '';
+                    configData[`expert_${i}_name`] = nameInput?.value?.trim() || `Expert ${i}`;
+                    configData[`expert_${i}_enabled`] = enabledCheckbox?.checked ?? false;
+                    configData[`expert_${i}_system_prompt`] = systemPrompt?.value?.trim() || 'You are a helpful assistant. Provide detailed, accurate responses.';
+                }
                 
                 this.showStartupOverlay('Saving Settings...', 'Stopping servers and applying changes');
                 await this.apiCall('stop_server', { type: 'all' });
@@ -3616,68 +4596,8 @@ Your response (number or NULL):";
                             <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                             <span>Expert Models (GPU)</span>
                         </div>
-                        <div class="accordion-content">
-                            <div class="model-select-wrapper">
-                                <div class="model-select-label">
-                                    <div class="settings-checkbox" style="margin:0">
-                                        <input type="checkbox" id="governorTextEnabled" checked>
-                                        <label for="governorTextEnabled">Text Expert</label>
-                                    </div>
-                                    <span class="model-size" id="textModelSize"></span>
-                                </div>
-                                <select class="model-select" id="governorTextModel"><option value="">Select a model...</option></select>
-                                <div class="settings-hint">General conversation and text tasks</div>
-                            </div>
-                            
-                            <div class="model-select-wrapper">
-                                <div class="model-select-label">
-                                    <div class="settings-checkbox" style="margin:0">
-                                        <input type="checkbox" id="governorCodeEnabled" checked>
-                                        <label for="governorCodeEnabled">Code Expert</label>
-                                    </div>
-                                    <span class="model-size" id="codeModelSize"></span>
-                                </div>
-                                <select class="model-select" id="governorCodeModel"><option value="">Select a model...</option></select>
-                                <div class="settings-hint">Programming and code-related tasks</div>
-                            </div>
-                            
-                            <div class="model-select-wrapper">
-                                <div class="model-select-label">
-                                    <div class="settings-checkbox" style="margin:0">
-                                        <input type="checkbox" id="governorMedicalEnabled" checked>
-                                        <label for="governorMedicalEnabled">Medical Expert</label>
-                                    </div>
-                                    <span class="model-size" id="medicalModelSize"></span>
-                                </div>
-                                <select class="model-select" id="governorMedicalModel"><option value="">Select a model...</option></select>
-                                <div class="settings-hint">Medical and health-related questions</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- ACCORDION: System Prompts -->
-                    <div class="settings-accordion" data-accordion="prompts">
-                        <div class="accordion-header">
-                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
-                            <span>System Prompts</span>
-                        </div>
-                        <div class="accordion-content">
-                            <div class="settings-hint" style="margin-bottom:1rem">Customize how each expert model behaves. These prompts are sent at the start of every conversation.</div>
-                            
-                            <div class="settings-item">
-                                <label class="settings-label">Text Expert Prompt</label>
-                                <textarea class="settings-textarea" id="textSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
-                            </div>
-                            
-                            <div class="settings-item">
-                                <label class="settings-label">Code Expert Prompt</label>
-                                <textarea class="settings-textarea" id="codeSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
-                            </div>
-                            
-                            <div class="settings-item">
-                                <label class="settings-label">Medical Expert Prompt</label>
-                                <textarea class="settings-textarea" id="medicalSystemPrompt" rows="2">You are a helpful assistant. Provide detailed, accurate responses.</textarea>
-                            </div>
+                        <div class="accordion-content" id="expertSlotsContainer">
+                            <!-- Expert slots will be generated dynamically by JavaScript -->
                         </div>
                     </div>
                     
@@ -3713,42 +4633,15 @@ Your response (number or NULL):";
                         </div>
                     </div>
                     
-                    <!-- ACCORDION: Context Pruning -->
-                    <div class="settings-accordion" data-accordion="pruning">
+                    <!-- ACCORDION: Context Management -->
+                    <div class="settings-accordion" data-accordion="context">
                         <div class="accordion-header">
                             <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
-                            <span>Context Pruning</span>
+                            <span>Context Management</span>
                         </div>
                         <div class="accordion-content">
-                            <div class="settings-hint" style="margin-bottom:1rem">Automatically condenses older messages to preserve context space while retaining key information.</div>
-                            
-                            <div class="settings-item">
-                                <div class="settings-checkbox">
-                                    <input type="checkbox" id="enablePruning" checked>
-                                    <label for="enablePruning">Enable Context Pruning</label>
-                                </div>
-                            </div>
-                            
-                            <div class="settings-item">
-                                <label class="settings-label">Character Threshold</label>
-                                <input type="number" class="settings-input" id="pruneThreshold" value="1500" min="100" max="10000">
-                                <div class="settings-hint">Messages shorter than this will be skipped</div>
-                            </div>
-                            
-                            <div class="settings-item">
-                                <label class="settings-label">Pruning Prompt</label>
-                                <textarea class="settings-textarea" id="prunePrompt" rows="2">Condense this message to only the essential information in 2-3 sentences:</textarea>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- ACCORDION: Velocity Index -->
-                    <div class="settings-accordion" data-accordion="velocity">
-                        <div class="accordion-header">
-                            <svg class="accordion-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
-                            <span>Velocity Index</span>
-                        </div>
-                        <div class="accordion-content">
+                            <!-- Velocity Index Section -->
+                            <div class="settings-hint" style="margin-bottom:0.5rem;font-weight:600;color:var(--text-secondary)">Velocity Index</div>
                             <div class="settings-hint" style="margin-bottom:1rem">Archives older messages when context fills up, then intelligently recalls relevant context when needed.</div>
                             
                             <div class="settings-item">
@@ -3789,6 +4682,30 @@ Your response (number or NULL):";
                                     <span class="velocity-stat-label">Recalls</span>
                                     <span class="velocity-stat-value" id="velocityRecallCount">0</span>
                                 </div>
+                            </div>
+                            
+                            <!-- Context Pruning Section -->
+                            <div style="border-top:1px solid var(--glass-border);margin:1.5rem 0 1rem 0;padding-top:1rem">
+                                <div class="settings-hint" style="margin-bottom:0.5rem;font-weight:600;color:var(--text-secondary)">Context Pruning</div>
+                                <div class="settings-hint" style="margin-bottom:1rem">Automatically condenses older messages to preserve context space while retaining key information.</div>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <div class="settings-checkbox">
+                                    <input type="checkbox" id="enablePruning" checked>
+                                    <label for="enablePruning">Enable Context Pruning</label>
+                                </div>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Character Threshold</label>
+                                <input type="number" class="settings-input" id="pruneThreshold" value="1500" min="100" max="10000">
+                                <div class="settings-hint">Messages shorter than this will be skipped</div>
+                            </div>
+                            
+                            <div class="settings-item">
+                                <label class="settings-label">Pruning Prompt</label>
+                                <textarea class="settings-textarea" id="prunePrompt" rows="2">Produce a slimmed down version of the following message, preserving all crucial details:</textarea>
                             </div>
                         </div>
                     </div>
@@ -3876,7 +4793,7 @@ Your response (number or NULL):";
                 <button class="new-chat-btn" id="newChatBtn"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg><span>New Chat</span></button>
                 <div class="chats-list scrollbar-hidden" id="chatsList"></div>
                 <div class="sidebar-footer">
-                    <span class="sidebar-version">v0.9-R7 © 2026 Technologyst Labs</span>
+                    <span class="sidebar-version">v0.9-R8 © 2026 Technologyst Labs</span>
                 </div>
             </div>
             
@@ -4104,6 +5021,7 @@ Your response (number or NULL):";
             .input-wrapper:focus-within .stat-box.status.pruning { background: rgba(0, 0, 0, 0.5) !important; color: var(--warning) !important; border-color: rgba(255, 214, 10, 0.3) !important }
             .input-wrapper:focus-within .stat-box.status.generating { background: rgba(0, 0, 0, 0.5) !important; color: var(--success) !important; border-color: rgba(48, 209, 88, 0.3) !important }
             .input-wrapper:focus-within .stat-box.status.error { background: rgba(0, 0, 0, 0.5) !important; color: var(--error) !important; border-color: rgba(255, 69, 58, 0.3) !important }
+            .input-wrapper:focus-within .stat-box.status.learning { background: rgba(0, 0, 0, 0.5) !important; color: #FF69B4 !important; border-color: rgba(255, 105, 180, 0.3) !important }
             .input-wrapper:focus-within .stat-box.context { background: rgba(0, 0, 0, 0.5) !important; border-color: rgba(255, 255, 255, 0.2) !important }
             .input-wrapper:focus-within .stat-box.input-tokens { background: rgba(0, 0, 0, 0.5) !important; border-color: rgba(255, 255, 255, 0.2) !important }
             .input-wrapper:focus-within .stat-box.warning { background: rgba(0, 0, 0, 0.5) !important; border-color: rgba(255, 69, 58, 0.3) !important }
@@ -4145,6 +5063,7 @@ Your response (number or NULL):";
             .stat-box.status.ready { background: linear-gradient(160deg, rgba(91, 196, 232, 0.15) 0%, rgba(75, 190, 220, 0.2) 100%); color: var(--accent-primary); border-color: rgba(91, 196, 232, 0.25); box-shadow: 0 0 8px rgba(91, 196, 232, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
             .stat-box.status.stopped { background: linear-gradient(160deg, rgba(91, 196, 232, 0.15) 0%, rgba(75, 190, 220, 0.2) 100%); color: var(--accent-primary); border-color: rgba(91, 196, 232, 0.25); box-shadow: 0 0 8px rgba(91, 196, 232, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
             .stat-box.status.offline { background: linear-gradient(160deg, rgba(255, 69, 58, 0.15) 0%, rgba(220, 55, 48, 0.2) 100%); color: var(--error); border-color: rgba(255, 69, 58, 0.25); box-shadow: 0 0 8px rgba(255, 69, 58, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
+            .stat-box.status.learning { background: linear-gradient(160deg, rgba(255, 105, 180, 0.15) 0%, rgba(255, 20, 147, 0.2) 100%); color: #FF69B4; border-color: rgba(255, 105, 180, 0.25); box-shadow: 0 0 8px rgba(255, 105, 180, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
             .stat-box.status.warning { background: linear-gradient(160deg, rgba(255, 214, 10, 0.15) 0%, rgba(220, 180, 10, 0.2) 100%); color: var(--warning); border-color: rgba(255, 214, 10, 0.25); box-shadow: 0 0 8px rgba(255, 214, 10, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
             .stat-box.context { background: linear-gradient(160deg, rgba(91, 196, 232, 0.15) 0%, rgba(75, 190, 220, 0.2) 100%); color: var(--accent-primary); border-color: rgba(91, 196, 232, 0.25); box-shadow: 0 0 8px rgba(91, 196, 232, 0.1), 0 2px 6px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.08) }
             .stat-box.pruning { background: var(--success-soft); color: var(--success); border-color: rgba(48, 209, 88, 0.2) }
@@ -4181,7 +5100,7 @@ Your response (number or NULL):";
             .suggestion-title { font-weight: 500; color: var(--text-secondary); margin-bottom: .25rem; font-size: .9rem }
             .suggestion-btn:hover .suggestion-title { color: var(--text-primary) }
             .suggestion-desc { font-size: .75rem; color: var(--text-quaternary); line-height: 1.4 }
-            .settings-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 450px; background: var(--bg-panel); backdrop-filter: blur(var(--blur-xl)) saturate(180%); -webkit-backdrop-filter: blur(var(--blur-xl)) saturate(180%); border-left: 1px solid var(--glass-border); z-index: 1000; transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; overflow: hidden }
+            .settings-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 470px; background: var(--bg-panel); backdrop-filter: blur(var(--blur-xl)) saturate(180%); -webkit-backdrop-filter: blur(var(--blur-xl)) saturate(180%); border-left: 1px solid var(--glass-border); z-index: 1000; transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; overflow: hidden }
             .settings-panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 20%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.1) 80%, transparent 100%); z-index: 1 }
             .settings-panel.open { transform: translateX(0) }
             .settings-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02) }
@@ -4235,6 +5154,12 @@ Your response (number or NULL):";
             .model-select { width: 100%; padding: .75rem 1rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-primary); font-size: .875rem; transition: all var(--transition-smooth); cursor: pointer }
             .model-select:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-primary-soft) }
             .model-select option { background: #1a1a24; color: #e5e5e5; padding: 0.5rem }
+            .expert-name-input { width: 100%; padding: .625rem 1rem; background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: var(--radius-md); color: var(--text-primary); font-size: .875rem; transition: all var(--transition-smooth) }
+            .expert-name-input:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 0 3px var(--accent-primary-soft) }
+            .expert-name-input::placeholder { color: var(--text-quaternary) }
+            .expert-slot { padding-bottom: 1rem; border-bottom: 1px solid var(--glass-border); margin-bottom: 1rem }
+            .expert-slot:last-child { border-bottom: none; margin-bottom: 0 }
+            .expert-prompt-item[data-slot] { margin-bottom: 1rem }
             @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
             .startup-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 2000; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s }
             .startup-overlay.active { opacity: 1; visibility: visible }
@@ -4400,8 +5325,21 @@ Your response (number or NULL):";
                             <div class="wmc-description">
                                 openOrchestrate is an intelligent AI orchestration system that routes your queries to specialized expert models. 
                                 This wizard will help you configure your expert models and advanced features.
-                                <br><br>
-                                Let's get started by setting up your specialized AI experts.
+                            </div>
+                            
+                            <div class="wmc-warning" style="background: rgba(255, 180, 0, 0.15); border: 1px solid rgba(255, 180, 0, 0.4); border-radius: 8px; padding: 1rem; margin: 1.5rem 0;">
+                                <div style="font-weight: 600; color: #ffb400; margin-bottom: 0.5rem;">⚠️ Important</div>
+                                <div style="color: rgba(255, 255, 255, 0.8); line-height: 1.6;">
+                                    It is advised to <strong>close all GPU related applications</strong> before proceeding to ensure maximum VRAM availability for your models.
+                                </div>
+                            </div>
+                            
+                            <div class="wmc-info" style="background: rgba(91, 196, 232, 0.15); border: 1px solid rgba(91, 196, 232, 0.4); border-radius: 8px; padding: 1rem; margin: 1rem 0;">
+                                <div style="font-weight: 600; color: #5bc4e8; margin-bottom: 0.5rem;">ℹ️ First Run Notice</div>
+                                <div style="color: rgba(255, 255, 255, 0.8); line-height: 1.6;">
+                                    The first time you run a language model, openOrchestrate will calculate the best possible context length for your system. 
+                                    <strong>This could take several minutes.</strong> Please be patient — this calibration will only take place once.
+                                </div>
                             </div>
                         </div>
                         <div class="wmc-right">
@@ -4411,130 +5349,42 @@ Your response (number or NULL):";
                         </div></div>
                     </div>
 
-                    <!-- Page 1: Text Expert -->
+                    <!-- Page 1: Expert Models -->
                     <div class="wmc-page" data-page="1">
                         <div class="wmc-page-container">
                         <div class="wmc-left">
-                            <div class="wmc-page-title">Configure Text Expert</div>
+                            <div class="wmc-page-title">Configure Expert Models</div>
                             <div class="wmc-description">
-                                The Text Expert handles general conversations, creative writing, analysis, and everyday tasks. 
-                                Choose a versatile, well-rounded model for optimal performance.
+                                Configure your specialized AI experts. Enable the ones you need and assign a model to each. 
+                                You can customize names and add more experts later in Settings.
                             </div>
                             
-                            <div class="wmc-section">
-                                <div class="wmc-toggle-group">
-                                    <div class="wmc-toggle active" id="wmcTextToggle">
-                                        <div class="wmc-toggle-knob"></div>
-                                    </div>
-                                    <div class="wmc-toggle-label">Enable Text Expert</div>
-                                </div>
-                                
-                                <div class="wmc-section-label">Select Model</div>
-                                <select class="wmc-select" id="wmcTextModel">
-                                    <option value="">Select a model...</option>
-                                </select>
+                            <div class="wmc-expert-slots" id="wmcExpertSlots" style="max-height: 320px; overflow-y: auto; margin: 1rem 0; padding-right: 0.5rem;">
+                                <!-- Expert slots will be generated by JavaScript -->
                             </div>
                             
                             <div class="wmc-recommendation">
-                                <div class="wmc-recommendation-title">💡 Recommended</div>
+                                <div class="wmc-recommendation-title">💡 Tip</div>
                                 <div class="wmc-recommendation-text">
-                                    Look for models like <strong>Mistral</strong>, <strong>Llama</strong>, or <strong>Qwen</strong> (7B-13B parameters). 
-                                    These provide excellent general-purpose performance.
+                                    Start with just one or two experts. You can always add more later. 
+                                    Look for models like <strong>Llama</strong>, <strong>Mistral</strong>, <strong>Qwen</strong>, or <strong>DeepSeek</strong>.
                                 </div>
                             </div>
                         </div>
                         <div class="wmc-right">
                             <div class="wmc-icon-container">
-                                <div class="wmc-icon">📝</div>
+                                <div class="wmc-icon">🧠</div>
                             </div>
                         </div></div>
                     </div>
 
-                    <!-- Page 2: Code Expert -->
+                    <!-- Page 2: Auxiliary Model -->
                     <div class="wmc-page" data-page="2">
-                        <div class="wmc-page-container">
-                        <div class="wmc-left">
-                            <div class="wmc-page-title">Configure Code Expert</div>
-                            <div class="wmc-description">
-                                The Code Expert specializes in programming, debugging, and technical documentation. 
-                                Select a model trained specifically for code generation and analysis.
-                            </div>
-                            
-                            <div class="wmc-section">
-                                <div class="wmc-toggle-group">
-                                    <div class="wmc-toggle active" id="wmcCodeToggle">
-                                        <div class="wmc-toggle-knob"></div>
-                                    </div>
-                                    <div class="wmc-toggle-label">Enable Code Expert</div>
-                                </div>
-                                
-                                <div class="wmc-section-label">Select Model</div>
-                                <select class="wmc-select" id="wmcCodeModel">
-                                    <option value="">Select a model...</option>
-                                </select>
-                            </div>
-                            
-                            <div class="wmc-recommendation">
-                                <div class="wmc-recommendation-title">💡 Recommended</div>
-                                <div class="wmc-recommendation-text">
-                                    Look for <strong>CodeLlama</strong>, <strong>DeepSeek Coder</strong>, or <strong>StarCoder</strong> models. 
-                                    Code-specific models (7B-13B) often outperform larger general models for programming tasks.
-                                </div>
-                            </div>
-                        </div>
-                        <div class="wmc-right">
-                            <div class="wmc-icon-container">
-                                <div class="wmc-icon">💻</div>
-                            </div>
-                        </div></div>
-                    </div>
-
-                    <!-- Page 3: Medical Expert -->
-                    <div class="wmc-page" data-page="3">
-                        <div class="wmc-page-container">
-                        <div class="wmc-left">
-                            <div class="wmc-page-title">Configure Medical Expert</div>
-                            <div class="wmc-description">
-                                The Medical Expert provides information on healthcare topics, medical terminology, and clinical questions. 
-                                Choose a model trained on medical literature and healthcare data.
-                            </div>
-                            
-                            <div class="wmc-section">
-                                <div class="wmc-toggle-group">
-                                    <div class="wmc-toggle active" id="wmcMedicalToggle">
-                                        <div class="wmc-toggle-knob"></div>
-                                    </div>
-                                    <div class="wmc-toggle-label">Enable Medical Expert</div>
-                                </div>
-                                
-                                <div class="wmc-section-label">Select Model</div>
-                                <select class="wmc-select" id="wmcMedicalModel">
-                                    <option value="">Select a model...</option>
-                                </select>
-                            </div>
-                            
-                            <div class="wmc-recommendation">
-                                <div class="wmc-recommendation-title">💡 Recommended</div>
-                                <div class="wmc-recommendation-text">
-                                    Look for <strong>Meditron</strong>, <strong>BioMistral</strong>, or medical-tuned <strong>Llama</strong> models. 
-                                    If unavailable, you can use your general text model here as well.
-                                </div>
-                            </div>
-                        </div>
-                        <div class="wmc-right">
-                            <div class="wmc-icon-container">
-                                <div class="wmc-icon">🏥</div>
-                            </div>
-                        </div></div>
-                    </div>
-
-                    <!-- Page 4: Auxiliary Model -->
-                    <div class="wmc-page" data-page="4">
                         <div class="wmc-page-container">
                         <div class="wmc-left">
                             <div class="wmc-page-title">Configure Auxiliary Model</div>
                             <div class="wmc-description">
-                                The Auxiliary model handles query routing, context pruning, and indexing operations. 
+                                The Auxiliary model handles query routing, context management, and background tasks. 
                                 Choose a small, fast model (1-3B parameters) that runs efficiently on CPU.
                             </div>
                             
@@ -4551,15 +5401,15 @@ Your response (number or NULL):";
                                     <div>
                                         <div class="wmc-section-label" style="margin-bottom: 0.5rem">Context Length</div>
                                         <input type="number" class="wmc-input" id="wmcAuxContext" value="2048" min="512" max="8192" step="512">
-                                        <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                            Maximum context window for the auxiliary model
+                                        <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem;">
+                                            Maximum context window
                                         </div>
                                     </div>
                                     <div>
                                         <div class="wmc-section-label" style="margin-bottom: 0.5rem">Port</div>
                                         <input type="number" class="wmc-input" id="wmcAuxPort" value="8081" min="1024" max="65535">
-                                        <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                            Network port for auxiliary model server
+                                        <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem;">
+                                            Network port for server
                                         </div>
                                     </div>
                                 </div>
@@ -4568,8 +5418,8 @@ Your response (number or NULL):";
                             <div class="wmc-recommendation">
                                 <div class="wmc-recommendation-title">💡 Recommended</div>
                                 <div class="wmc-recommendation-text">
-                                    Look for <strong>Phi-2</strong>, <strong>TinyLlama</strong>, or <strong>Qwen-1.8B</strong>. 
-                                    Small models (1-3B) work best here and will run on CPU to preserve GPU resources.
+                                    Look for <strong>Phi</strong>, <strong>TinyLlama</strong>, <strong>Qwen2-1.5B</strong>, or <strong>SmolLM</strong>. 
+                                    Small models work best here and run on CPU to preserve GPU resources.
                                 </div>
                             </div>
                         </div>
@@ -4580,13 +5430,13 @@ Your response (number or NULL):";
                         </div></div>
                     </div>
 
-                    <!-- Page 5: Advanced Features -->
-                    <div class="wmc-page" data-page="5">
+                    <!-- Page 3: Context Management -->
+                    <div class="wmc-page" data-page="3">
                         <div class="wmc-page-container">
                         <div class="wmc-left">
-                            <div class="wmc-page-title">Advanced Features</div>
+                            <div class="wmc-page-title">Context Management</div>
                             <div class="wmc-description">
-                                Configure intelligent memory and context management systems for optimal long-form conversations.
+                                Configure intelligent memory and context management for optimal long-form conversations.
                             </div>
                             
                             <div class="wmc-section">
@@ -4594,9 +5444,9 @@ Your response (number or NULL):";
                                     <div class="wmc-toggle active" id="wmcVelocityToggle">
                                         <div class="wmc-toggle-knob"></div>
                                     </div>
-                                    <div class="wmc-toggle-label">Enable Velocity Memory System</div>
+                                    <div class="wmc-toggle-label">Enable Velocity Index</div>
                                 </div>
-                                <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-left: 71px; margin-top: -0.5rem">
+                                <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-left: 71px; margin-top: -0.5rem">
                                     Automatically archives and recalls conversation context
                                 </div>
                             </div>
@@ -4608,24 +5458,24 @@ Your response (number or NULL):";
                                     </div>
                                     <div class="wmc-toggle-label">Enable Context Pruning</div>
                                 </div>
-                                <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-left: 71px; margin-top: -0.5rem">
+                                <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-left: 71px; margin-top: -0.5rem">
                                     Automatically condenses messages to preserve context space
                                 </div>
                             </div>
                             
-                            <div class="wmc-settings-grid">
+                            <div class="wmc-settings-grid" style="margin-top: 1rem;">
                                 <div>
                                     <div class="wmc-section-label">Velocity Threshold (%)</div>
                                     <input type="number" class="wmc-input" id="wmcVelocityThreshold" value="40" min="10" max="90" step="5">
-                                    <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                        When context usage reaches this percentage, older conversations are automatically archived
+                                    <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem;">
+                                        Archive when context exceeds this %
                                     </div>
                                 </div>
                                 <div>
                                     <div class="wmc-section-label">Pruning Threshold (chars)</div>
                                     <input type="number" class="wmc-input" id="wmcPruneThreshold" value="1500" min="500" max="5000" step="100">
-                                    <div style="font-size: 0.875rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem; line-height: 1.5">
-                                        Messages longer than this are automatically condensed to preserve context space
+                                    <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem;">
+                                        Condense messages longer than this
                                     </div>
                                 </div>
                             </div>
@@ -4637,8 +5487,8 @@ Your response (number or NULL):";
                         </div></div>
                     </div>
 
-                    <!-- Page 6: Complete -->
-                    <div class="wmc-page" data-page="6">
+                    <!-- Page 4: Complete -->
+                    <div class="wmc-page" data-page="4">
                         <div class="wmc-page-container">
                         <div class="wmc-left">
                             <div class="wmc-page-title">Setup Complete</div>
@@ -4646,6 +5496,15 @@ Your response (number or NULL):";
                                 Your configuration has been saved. openOrchestrate is ready to intelligently route your queries 
                                 to the appropriate expert models.
                             </div>
+                            
+                            <div class="wmc-info" style="background: rgba(91, 196, 232, 0.15); border: 1px solid rgba(91, 196, 232, 0.4); border-radius: 8px; padding: 1rem; margin: 1.5rem 0;">
+                                <div style="font-weight: 600; color: #5bc4e8; margin-bottom: 0.5rem;">ℹ️ Reminder</div>
+                                <div style="color: rgba(255, 255, 255, 0.8); line-height: 1.6;">
+                                    Remember, the first model launch will include context calibration which may take several minutes. 
+                                    Subsequent launches will be much faster.
+                                </div>
+                            </div>
+                            
                             <div class="wmc-final-message">
                                 Click <strong>Finish</strong> to start using openOrchestrate.
                             </div>
@@ -4672,14 +5531,17 @@ Your response (number or NULL):";
         // WIZARD
         const WMCWizard = {
             currentPage: 0,
-            totalPages: 7,
+            totalPages: 5,
             availableModels: [],
             soundtrackStarted: false,
             soundtrack: null,
+            expertNames: ['Text', 'Code', 'Medical', 'Electrical', 'Vehicle', 'Expert 6', 'Expert 7', 'Expert 8', 'Expert 9', 'Expert 10'],
+            expertEnabled: [true, true, true, true, true, false, false, false, false, false],
 
             init() {
                 this.bindEvents();
                 this.loadAvailableModels();
+                this.generateExpertSlots();
                 this.checkAndShow();
             },
 
@@ -4688,12 +5550,46 @@ Your response (number or NULL):";
                 document.getElementById('wmcBack').addEventListener('click', () => this.prevPage());
                 document.getElementById('wmcCancel').addEventListener('click', () => this.cancel());
                 
-                ['wmcTextToggle', 'wmcCodeToggle', 'wmcMedicalToggle', 'wmcVelocityToggle', 'wmcPruningToggle'].forEach(id => {
+                ['wmcVelocityToggle', 'wmcPruningToggle'].forEach(id => {
                     const toggle = document.getElementById(id);
                     if (toggle) {
                         toggle.addEventListener('click', () => toggle.classList.toggle('active'));
                     }
                 });
+            },
+            
+            generateExpertSlots() {
+                const container = document.getElementById('wmcExpertSlots');
+                if (!container) return;
+                
+                let html = '';
+                for (let i = 1; i <= 10; i++) {
+                    const name = this.expertNames[i-1];
+                    const enabled = this.expertEnabled[i-1];
+                    html += `
+                        <div class="wmc-expert-slot" style="padding: 0.75rem 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                                <div class="wmc-toggle ${enabled ? 'active' : ''}" id="wmcExpert${i}Toggle" style="flex-shrink: 0;">
+                                    <div class="wmc-toggle-knob"></div>
+                                </div>
+                                <input type="text" class="wmc-input" id="wmcExpert${i}Name" value="${name}" 
+                                    style="flex: 1; padding: 0.5rem; font-size: 0.9rem;" placeholder="Expert name...">
+                            </div>
+                            <select class="wmc-select" id="wmcExpert${i}Model" style="width: 100%; font-size: 0.85rem;">
+                                <option value="">Select a model...</option>
+                            </select>
+                        </div>
+                    `;
+                }
+                container.innerHTML = html;
+                
+                // Bind toggle events for expert slots
+                for (let i = 1; i <= 10; i++) {
+                    const toggle = document.getElementById(`wmcExpert${i}Toggle`);
+                    if (toggle) {
+                        toggle.addEventListener('click', () => toggle.classList.toggle('active'));
+                    }
+                }
             },
 
             async loadAvailableModels() {
@@ -4715,20 +5611,31 @@ Your response (number or NULL):";
             },
 
             populateDropdowns() {
-                const dropdowns = ['wmcTextModel', 'wmcCodeModel', 'wmcMedicalModel', 'wmcAuxModel'];
+                // Populate expert model dropdowns
+                for (let i = 1; i <= 10; i++) {
+                    const select = document.getElementById(`wmcExpert${i}Model`);
+                    if (select) {
+                        select.innerHTML = '<option value="">Select a model...</option>';
+                        this.availableModels.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.filename;
+                            option.textContent = model.filename;
+                            select.appendChild(option);
+                        });
+                    }
+                }
                 
-                dropdowns.forEach(id => {
-                    const select = document.getElementById(id);
-                    if (!select) return;
-                    
-                    select.innerHTML = '<option value="">Select a model...</option>';
+                // Populate aux model dropdown
+                const auxSelect = document.getElementById('wmcAuxModel');
+                if (auxSelect) {
+                    auxSelect.innerHTML = '<option value="">Select a model...</option>';
                     this.availableModels.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model.filename;
                         option.textContent = model.filename;
-                        select.appendChild(option);
+                        auxSelect.appendChild(option);
                     });
-                });
+                }
             },
 
             async checkAndShow() {
@@ -4742,7 +5649,15 @@ Your response (number or NULL):";
                     
                     if (data.success && data.config) {
                         const config = data.config;
-                        const hasModels = config.text_model || config.code_model || config.medical_model;
+                        
+                        // Check if any expert has a model configured
+                        let hasModels = false;
+                        for (let i = 1; i <= 10; i++) {
+                            if (config[`expert_${i}_model`]) {
+                                hasModels = true;
+                                break;
+                            }
+                        }
                         
                         if (!hasModels) {
                             setTimeout(() => {
@@ -4750,20 +5665,31 @@ Your response (number or NULL):";
                             }, 300);
                         }
                         
-                        document.getElementById('wmcTextModel').value = config.text_model || '';
-                        document.getElementById('wmcCodeModel').value = config.code_model || '';
-                        document.getElementById('wmcMedicalModel').value = config.medical_model || '';
+                        // Load existing config into wizard fields
+                        for (let i = 1; i <= 10; i++) {
+                            const nameInput = document.getElementById(`wmcExpert${i}Name`);
+                            const modelSelect = document.getElementById(`wmcExpert${i}Model`);
+                            const toggle = document.getElementById(`wmcExpert${i}Toggle`);
+                            
+                            if (nameInput) nameInput.value = config[`expert_${i}_name`] || this.expertNames[i-1];
+                            if (modelSelect) modelSelect.value = config[`expert_${i}_model`] || '';
+                            if (toggle) {
+                                if (config[`expert_${i}_enabled`] === false) {
+                                    toggle.classList.remove('active');
+                                } else if (config[`expert_${i}_enabled`] === true) {
+                                    toggle.classList.add('active');
+                                }
+                            }
+                        }
+                        
                         document.getElementById('wmcAuxModel').value = config.aux_model || '';
                         document.getElementById('wmcAuxContext').value = config.aux_context_length || 2048;
                         document.getElementById('wmcAuxPort').value = config.aux_port || 8081;
                         document.getElementById('wmcVelocityThreshold').value = config.velocity_threshold || 40;
                         document.getElementById('wmcPruneThreshold').value = config.prune_threshold || 1500;
                         
-                        if (!config.text_enabled) document.getElementById('wmcTextToggle').classList.remove('active');
-                        if (!config.code_enabled) document.getElementById('wmcCodeToggle').classList.remove('active');
-                        if (!config.medical_enabled) document.getElementById('wmcMedicalToggle').classList.remove('active');
-                        if (!config.velocity_enabled) document.getElementById('wmcVelocityToggle').classList.remove('active');
-                        if (!config.enable_pruning) document.getElementById('wmcPruningToggle').classList.remove('active');
+                        if (config.velocity_enabled === false) document.getElementById('wmcVelocityToggle').classList.remove('active');
+                        if (config.enable_pruning === false) document.getElementById('wmcPruningToggle').classList.remove('active');
                     } else {
                         setTimeout(() => {
                             document.getElementById('wmcWizard').classList.remove('hidden');
@@ -4814,10 +5740,8 @@ Your response (number or NULL):";
             },
 
             cancel() {
-                if (confirm('Exit setup wizard?')) {
-                    this.stopSoundtrack();
-                    this.close();
-                }
+                this.stopSoundtrack();
+                this.close();
             },
             
             startSoundtrack() {
@@ -4918,14 +5842,8 @@ Your response (number or NULL):";
             },
 
             collectSettings() {
-                return {
-                    text_model: document.getElementById('wmcTextModel').value.trim(),
-                    code_model: document.getElementById('wmcCodeModel').value.trim(),
-                    medical_model: document.getElementById('wmcMedicalModel').value.trim(),
+                const settings = {
                     aux_model: document.getElementById('wmcAuxModel').value.trim(),
-                    text_enabled: document.getElementById('wmcTextToggle').classList.contains('active'),
-                    code_enabled: document.getElementById('wmcCodeToggle').classList.contains('active'),
-                    medical_enabled: document.getElementById('wmcMedicalToggle').classList.contains('active'),
                     aux_cpu_only: true,
                     aux_context_length: parseInt(document.getElementById('wmcAuxContext').value) || 2048,
                     aux_port: parseInt(document.getElementById('wmcAuxPort').value) || 8081,
@@ -4939,14 +5857,33 @@ Your response (number or NULL):";
                     velocity_recall_prompt: 'Given the user\'s new message, determine which archived conversation topic (if any) is most relevant and should be recalled to provide better context. If one topic is clearly relevant, respond with ONLY the number in brackets (e.g., 0 or 3). If no topic is relevant, respond with: NULL',
                     prune_prompt: 'Condense this message to only the essential information in 2-3 sentences:'
                 };
+                
+                // Collect 10 expert slots
+                for (let i = 1; i <= 10; i++) {
+                    const nameInput = document.getElementById(`wmcExpert${i}Name`);
+                    const modelSelect = document.getElementById(`wmcExpert${i}Model`);
+                    const toggle = document.getElementById(`wmcExpert${i}Toggle`);
+                    
+                    settings[`expert_${i}_name`] = nameInput?.value?.trim() || this.expertNames[i-1];
+                    settings[`expert_${i}_model`] = modelSelect?.value?.trim() || '';
+                    settings[`expert_${i}_enabled`] = toggle?.classList.contains('active') ?? this.expertEnabled[i-1];
+                    settings[`expert_${i}_system_prompt`] = 'You are a helpful assistant. Provide detailed, accurate responses.';
+                }
+                
+                return settings;
             },
 
             async saveSettings() {
                 const settings = this.collectSettings();
 
-                const hasModel = (settings.text_enabled && settings.text_model) || 
-                                (settings.code_enabled && settings.code_model) || 
-                                (settings.medical_enabled && settings.medical_model);
+                // Check if at least one expert has a model
+                let hasModel = false;
+                for (let i = 1; i <= 10; i++) {
+                    if (settings[`expert_${i}_enabled`] && settings[`expert_${i}_model`]) {
+                        hasModel = true;
+                        break;
+                    }
+                }
                 
                 if (!hasModel) {
                     alert('Please configure at least one expert model before continuing.');
