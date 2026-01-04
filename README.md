@@ -20,6 +20,25 @@
 
 ---
 
+## 📸 SCREENSHOTS
+
+<div align="center">
+<table>
+<tr>
+<td align="center">
+<img src="/images/scrnsht1.png" alt="First Time Setup Wizard" width="100%">
+<sub>Main Interface - Intelligent Model Routing</sub>
+</td>
+<td align="center">
+<img src="/images/shrnsht2.png" alt="Chat Interface" width="100%">
+<sub>Multi-Model Management & Context Control</sub>
+</td>
+</tr>
+</table>
+</div>
+
+---
+
 <table width="100%">
 <tr>
 <td width="50%" valign="top">
@@ -43,8 +62,8 @@
 ### 🎯 **QUICK STATS**
 
 ```
-Lines of Code.... 313,000+ chars
-Models Supported. UNLIMITED*
+Codebase......... 354,000+ chars
+Models Supported. Works best with instruct tuned models*
 Cloud Deps....... 0
 Telemetry........ 0
 Working Paths.... SACRED
@@ -150,8 +169,6 @@ GOVERNOR   INDEX   PRUNING
 | Runtime | phpDesktop-Chrome |
 | Inference | llama.cpp |
 
-**Total:** 313,000+ characters of disciplined code.
-
 ---
 
 ## 🎭 SUPPORTED MODELS
@@ -167,20 +184,20 @@ GOVERNOR   INDEX   PRUNING
 <td valign="top" width="50%">
 
 **🗣️ GENERAL LLMs**
-- Llama 2/3
-- Mistral
-- Qwen
 - Gemma
+- Phi
+- Qwen
+- Falcon
 - Your custom GGUF
 
 </td>
 <td valign="top" width="50%">
 
 **💻 CODE MODELS**
-- CodeLlama
+- Qwen Code
 - DeepSeek-Coder
 - StarCoder
-- WizardCoder
+- Mistral Code
 
 </td>
 </tr>
@@ -190,7 +207,7 @@ GOVERNOR   INDEX   PRUNING
 **🏥 MEDICAL/RESEARCH**
 - Meditron
 - BioMistral
-- Clinical models
+- MedGemma
 
 </td>
 <td valign="top">
@@ -256,7 +273,7 @@ GOVERNOR   INDEX   PRUNING
 
 <div align="center">
 
-## 🏴󠁧󠁢󠁷󠁬󠁳󠁿 MADE IN WALES
+## 🏴 MADE IN WALES
 
 <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/dc/Flag_of_Wales.svg/320px-Flag_of_Wales.svg.png" alt="Welsh Flag" width="200">
 
