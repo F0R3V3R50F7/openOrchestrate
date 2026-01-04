@@ -43,8 +43,8 @@
 ### 🎯 **QUICK STATS**
 
 ```
-Lines of Code.... 313,000+ chars
-Models Supported. UNLIMITED*
+Codebase......... 354,000+ chars
+Models Supported. Works best with instruct tuned models*
 Cloud Deps....... 0
 Telemetry........ 0
 Working Paths.... SACRED
@@ -150,8 +150,6 @@ GOVERNOR   INDEX   PRUNING
 | Runtime | phpDesktop-Chrome |
 | Inference | llama.cpp |
 
-**Total:** 313,000+ characters of disciplined code.
-
 ---
 
 ## 🎭 SUPPORTED MODELS
@@ -167,20 +165,20 @@ GOVERNOR   INDEX   PRUNING
 <td valign="top" width="50%">
 
 **🗣️ GENERAL LLMs**
-- Llama 2/3
-- Mistral
-- Qwen
 - Gemma
+- Phi
+- Qwen
+- Falcon
 - Your custom GGUF
 
 </td>
 <td valign="top" width="50%">
 
 **💻 CODE MODELS**
-- CodeLlama
+- Qwen Code
 - DeepSeek-Coder
 - StarCoder
-- WizardCoder
+- Mistral Code
 
 </td>
 </tr>
@@ -190,7 +188,7 @@ GOVERNOR   INDEX   PRUNING
 **🏥 MEDICAL/RESEARCH**
 - Meditron
 - BioMistral
-- Clinical models
+- MedGemma
 
 </td>
 <td valign="top">
