@@ -30,7 +30,7 @@
 <sub>Main Interface - Intelligent Model Routing</sub>
 </td>
 <td align="center">
-<img src="/images/shrnsht2.png" alt="Chat Interface" width="100%">
+<img src="/images/scrnsht2.png" alt="Chat Interface" width="100%">
 <sub>Multi-Model Management & Context Control</sub>
 </td>
 </tr>
