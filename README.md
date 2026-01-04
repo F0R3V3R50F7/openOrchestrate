@@ -27,11 +27,11 @@
 <tr>
 <td align="center">
 <img src="/images/scrnsht1.png" alt="First Time Setup Wizard" width="100%">
-<sub>Main Interface - Intelligent Model Routing</sub>
+<sub>First Time Setup Wizard</sub>
 </td>
 <td align="center">
 <img src="/images/scrnsht2.png" alt="Chat Interface" width="100%">
-<sub>Multi-Model Management & Context Control</sub>
+<sub>Chat Interface</sub>
 </td>
 </tr>
 </table>
