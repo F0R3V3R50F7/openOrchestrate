@@ -244,7 +244,7 @@ GOVERNOR   INDEX   PRUNING
 
 <div align="center">
 
-### 🚧 **UNDER ACTIVE DEVELOPMENT** 🚧
+### 🚧 **UNDER ACTIVE DEVELOPMENT - CURRENTLY VULKAN ONLY!!** 🚧
 
 **Focus:** Stability > Features | **Approach:** Conservative releases
 
