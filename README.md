@@ -140,9 +140,17 @@ Attach text files for analysis.
 
 <div align="center" style="margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
 
-<a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank" style="display: inline-block; background: #000000; color: #FFDD00; padding: 20px; border-radius: 10px; text-decoration: none; font-size: 48px; font-weight: bold; border: 3px solid #FFDD00; margin-top: 10px; width: 80px; height: 80px; line-height: 80px; text-align: center;">
-💰
+## ☕ **SUPPORT THE PROJECT**
+
+<div style="margin: 20px 0;">
+<a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank">
+<div style="background: #FFDD00; color: #000000; padding: 15px 30px; border-radius: 5px; font-weight: bold; font-size: 20px; border: 2px solid #000000; display: inline-block;">
+💰 Buy Me a Coffee
+</div>
 </a>
+</div>
+
+**Fuel the development** • **Support more features** • **Keep it 100% local & independent**
 
 </div>
 
