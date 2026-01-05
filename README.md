@@ -140,13 +140,11 @@ Attach text files for analysis.
 
 <div align="center" style="margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
 
-## ☕ **SUPPORT THE PROJECT**
+## ☕ **KEEP THE PROJECT BREWING**
 
 <div style="margin: 20px 0;">
 <a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank">
-<div style="background: #FFDD00; color: #000000; padding: 15px 30px; border-radius: 5px; font-weight: bold; font-size: 20px; border: 2px solid #000000; display: inline-block;">
-💰 Buy Me a Coffee
-</div>
+<img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=💰&slug=F0R3V3R50F7&button_colour=FFDD00&font_colour=000000&font_family=Poppins&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me A Coffee" height="50">
 </a>
 </div>
 
