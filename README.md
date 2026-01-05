@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🎮 openOrchestrate 🎮
+# ❤️ openOrchestrate 🗪
 
-### ░░░▒▒▒▓▓▓ LOCAL AI, TREATED WITH RESPECT ▓▓▓▒▒▒░░░
+### ░░░▒▒▒▓▓▓ LOCAL AI THAT WORKS. ▓▓▓▒▒▒░░░
 
 </div>
 
@@ -14,7 +14,7 @@
 ![Built with](https://img.shields.io/badge/built_with-DISCIPLINE-orange?style=for-the-badge)
 ![Tested on](https://img.shields.io/badge/tested_on-REAL_HARDWARE-green?style=for-the-badge)
 
-**Est. 2024** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
+**Est. 2025** | **Powered by llama.cpp** | **Built on Caffeine & Principles**
 
 </div>
 
@@ -27,11 +27,11 @@
 <tr>
 <td align="center">
 <img src="/images/scrnsht1.png" alt="First Time Setup Wizard" width="100%">
-<sub>Main Interface - Intelligent Model Routing</sub>
+<sub>First Time Setup Wizard</sub>
 </td>
 <td align="center">
-<img src="/images/shrnsht2.png" alt="Chat Interface" width="100%">
-<sub>Multi-Model Management & Context Control</sub>
+<img src="/images/scrnsht2.png" alt="Chat Interface" width="100%">
+<sub>Chat Interface</sub>
 </td>
 </tr>
 </table>
@@ -134,7 +134,25 @@ Context limits managed **deliberately**, not silently dropped.
 ```
 
 ### 📎 **FILE ATTACHMENTS**
-Attach text files for analysis. Fully local.
+Attach text files for analysis.
+
+---
+
+<div align="center" style="margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
+
+## ☕ **KEEP THE PROJECT BREWING**
+
+<div style="margin: 20px 0;">
+<a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank">
+<img src="https://img.shields.io/badge/Buy_Me_a_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black&labelColor=000000" alt="Buy Me a Coffee" height="50">
+</a>
+</div>
+
+**Fuel the development** • **Support more features** • **Keep it 100% local & independent**
+
+<script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="F0R3V3R50F7" data-color="#FFDD00" data-emoji="💰" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff"></script>
+
+</div>
 
 ---
 
@@ -244,7 +262,7 @@ GOVERNOR   INDEX   PRUNING
 
 <div align="center">
 
-### 🚧 **UNDER ACTIVE DEVELOPMENT** 🚧
+### 🚧 **UNDER ACTIVE DEVELOPMENT - CURRENTLY VULKAN ONLY!!** 🚧
 
 **Focus:** Stability > Features | **Approach:** Conservative releases
 
