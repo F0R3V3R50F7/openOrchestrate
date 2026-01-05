@@ -135,27 +135,26 @@ Context limits managed **deliberately**, not silently dropped.
 
 ### 📎 **FILE ATTACHMENTS**
 Attach text files for analysis.
-<<<<<<< HEAD
 
 ---
 
 <div align="center" style="margin: 40px 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
 
-## ☕ **KEEP THE PROJECT BREWING**
+## 💰 **KEEP THE PROJECT BREWING**
 
 <div style="margin: 20px 0;">
 <a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank">
-<img src="https://img.shields.io/badge/Buy_Me_a_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black&labelColor=000000" alt="Buy Me a Coffee" height="50">
+<img src="https://img.shields.io/badge/💰_Buy_Me_a_Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black&labelColor=000000" alt="Buy Me a Coffee" height="50">
 </a>
 </div>
 
 **Fuel the development** • **Support more features** • **Keep it 100% local & independent**
 
-<script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="F0R3V3R50F7" data-color="#FFDD00" data-emoji="💰" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff"></script>
+<a href="https://www.buymeacoffee.com/F0R3V3R50F7" target="_blank" style="display: inline-block; background: #FFDD00; color: black; padding: 12px 24px; border-radius: 5px; text-decoration: none; font-weight: bold; border: 2px solid black; margin-top: 10px;">
+💰 Support via Buy Me a Coffee
+</a>
 
 </div>
-=======
->>>>>>> f624c24eb24baab729fd40170fddf91ceb954cf4
 
 ---
 
