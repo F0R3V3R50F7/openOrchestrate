@@ -135,6 +135,7 @@ Context limits managed **deliberately**, not silently dropped.
 
 ### 📎 **FILE ATTACHMENTS**
 Attach text files for analysis.
+<<<<<<< HEAD
 
 ---
 
@@ -153,6 +154,8 @@ Attach text files for analysis.
 <script type="text/javascript" src="https://cdnjs.buymeacoffee.com/1.0.0/button.prod.min.js" data-name="bmc-button" data-slug="F0R3V3R50F7" data-color="#FFDD00" data-emoji="💰" data-font="Poppins" data-text="Buy me a coffee" data-outline-color="#000000" data-font-color="#000000" data-coffee-color="#ffffff"></script>
 
 </div>
+=======
+>>>>>>> f624c24eb24baab729fd40170fddf91ceb954cf4
 
 ---
 
